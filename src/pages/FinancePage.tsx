@@ -29,7 +29,8 @@ import {
   TX_USER_ID,
 } from '@/lib/transactionSupabase';
 
-const zeekyChatUrl = '/functions/v1/zeeky-chat';
+const zeekyChatUrl = import.meta.env.VITE_ZEEKY_FUNCTION_URL || '/functions/v1/zeeky-chat';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
@@ -109,7 +110,11 @@ export default function FinancePage() {
 
       const response = await fetch(zeekyChatUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'apikey': supabaseAnonKey,
+        },
         body: JSON.stringify({
           message: `Bu ayki finansal durumumu analiz et ve tek cümle öneri ver. Gelir: ${income}${currencySymbol}, Gider: ${expense}${currencySymbol}, Bakiye: ${income - expense}${currencySymbol}`,
           user_id: TX_USER_ID,

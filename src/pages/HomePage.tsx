@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { ActionCategory } from '@/types/zeeky';
 import { cn } from '@/lib/utils';
 
-const zeekyChatUrl = '/functions/v1/zeeky-chat';
+const zeekyChatUrl = import.meta.env.VITE_ZEEKY_FUNCTION_URL || '/functions/v1/zeeky-chat';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -87,6 +88,8 @@ export default function HomePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'apikey': supabaseAnonKey,
         },
         body: JSON.stringify({
           message: userMessage,
