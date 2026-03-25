@@ -67,7 +67,7 @@ function mapRow(row: Record<string, unknown>): Transaction {
 
 export async function fetchTransactions(year: number, month: number): Promise<Transaction[]> {
   const startOfMonth = new Date(year, month, 1).toISOString();
-  const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+  const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
