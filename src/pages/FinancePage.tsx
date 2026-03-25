@@ -29,8 +29,8 @@ import {
   TX_USER_ID,
 } from '@/lib/transactionSupabase';
 
-const zeekyChatUrl = import.meta.env.VITE_ZEEKY_FUNCTION_URL || '/functions/v1/zeeky-chat';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const zeekyChatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-chat`;
 
 const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
