@@ -84,6 +84,8 @@ export default function HomePage() {
         .single();
       const personality = profileData?.ai_personality || 'balanced';
 
+      console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+      console.log('Function URL:', zeekyChatUrl);
       const response = await fetch(zeekyChatUrl, {
         method: 'POST',
         headers: {
