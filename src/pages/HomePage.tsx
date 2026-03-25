@@ -7,7 +7,7 @@ import { ActionCategory } from '@/types/zeeky';
 import { cn } from '@/lib/utils';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-const zeekyChatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-chat`;
+const zeekyChatUrl = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
 
 function getGreeting() {
   const h = new Date().getHours();
