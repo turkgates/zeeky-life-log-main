@@ -1,0 +1,13 @@
+{
+    "rewrites": [
+      {
+        "source": "/functions/:path*",
+        "destination": "https://gmcmreinpnhuszxlpgpj.supabase.co/functions/:path*"
+      }
+    ]
+  }
+  ```
+  
+  Kaydet ve Cursor terminalinde:
+  ```
+  vercel --prod

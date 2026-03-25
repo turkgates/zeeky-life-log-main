@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Plus, Filter, Sparkles, ArrowRight, RefreshCw, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { cn } from '@/lib/utils';
@@ -64,7 +65,7 @@ export default function FinancePage() {
   const [period,        setPeriod]        = useState<Period>('monthly');
   const [chartData,     setChartData]     = useState<ChartBar[]>([]);
   const [chartLoading,  setChartLoading]  = useState(false);
-  const [aiSuggestion,  setAiSuggestion]  = useState('');
+  const [aiSuggestion,  setAiSuggestion]  = useState<string | null>(null);
   const [aiLoading,     setAiLoading]     = useState(false);
   const [showAdd,       setShowAdd]       = useState(false);
   const [selectedTx,    setSelectedTx]    = useState<Transaction | null>(null);
@@ -89,17 +90,28 @@ export default function FinancePage() {
   useEffect(() => { fetchCategories().then(setCategories); }, []);
 
   // ── AI suggestion ────────────────────────────────────────────────────────
-  const fetchAiSuggestion = useCallback(async (_txs?: Transaction[]) => {
+  const fetchAiSuggestion = useCallback(async () => {
     setAiLoading(true);
     try {
-      console.log('Function URL:', zeekyChatUrl);
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const endOfMonth   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+
+      const { data: txData } = await supabase
+        .from('transactions')
+        .select('type, amount, category')
+        .eq('user_id', TX_USER_ID)
+        .gte('transaction_date', startOfMonth)
+        .lte('transaction_date', endOfMonth);
+
+      const income  = txData?.filter(t => t.type === 'income' ).reduce((s, t) => s + Number(t.amount), 0) ?? 0;
+      const expense = txData?.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0) ?? 0;
+
       const response = await fetch(zeekyChatUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: 'Bu ayki gelir ve gider durumumu tek cümleyle analiz et.',
+          message: `Bu ayki finansal durumumu analiz et ve tek cümle öneri ver. Gelir: ${income}${currencySymbol}, Gider: ${expense}${currencySymbol}, Bakiye: ${income - expense}${currencySymbol}`,
           user_id: TX_USER_ID,
           personality: 'balanced',
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -108,23 +120,19 @@ export default function FinancePage() {
       });
       const data = await response.json();
       console.log('Finance advice response:', data);
-      if (data.reply) {
-        const cleanReply = data.reply.trim();
-        if (cleanReply.length > 0) {
-          setAiSuggestion(cleanReply);
-        } else {
-          setAiSuggestion('Bu ay için henüz yeterli veri yok.');
-        }
+      const cleanReply = data.reply?.trim();
+      if (cleanReply && cleanReply.length > 10) {
+        setAiSuggestion(cleanReply);
       } else {
-        setAiSuggestion('Finansal verilerini analiz edemedim.');
+        setAiSuggestion(null);
       }
     } catch (error) {
       console.error('Finance advice error:', error);
-      setAiSuggestion('Bağlantı hatası oluştu.');
+      setAiSuggestion(null);
     } finally {
       setAiLoading(false);
     }
-  }, []);
+  }, [currencySymbol]);
 
   useEffect(() => {
     if (!txLoading) void fetchAiSuggestion();
@@ -267,7 +275,7 @@ export default function FinancePage() {
       </div>
 
       {/* ── AI Suggestion ──────────────────────────────────────────────── */}
-      {(aiLoading || (aiSuggestion && aiSuggestion.trim().length > 0)) && (
+      {(aiLoading || aiSuggestion !== null) && (
       <div className="mx-4 mb-4 bg-gradient-to-r from-[hsl(227,47%,45%)] to-[hsl(263,55%,50%)] rounded-2xl p-4 text-white">
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
@@ -280,7 +288,7 @@ export default function FinancePage() {
                 <Loader2 className="w-3.5 h-3.5 animate-spin" /> Zeeky analiz ediyor...
               </p>
             ) : (
-              <p className="text-sm leading-snug">{aiSuggestion || '—'}</p>
+              <p className="text-sm leading-snug">{aiSuggestion}</p>
             )}
           </div>
         </div>
