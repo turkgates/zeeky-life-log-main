@@ -1,52 +1,198 @@
-import { useState } from 'react';
-import { Filter, Check, X, Heart, Coins, Users, Activity } from 'lucide-react';
-import { useSuggestions } from '@/store/useStore';
+import { useState, useEffect, useCallback } from 'react';
+import { Filter, Check, X, Heart, Coins, Users, Activity, RefreshCw, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
-const FILTERS = [
-  { key: 'all', label: 'Tümü' },
-  { key: 'saglik', label: 'Sağlık', icon: Activity },
-  { key: 'sosyal', label: 'Sosyal', icon: Users },
-  { key: 'finans', label: 'Finans', icon: Coins },
-  { key: 'aliskanlik', label: 'Alışkanlık', icon: Heart },
+const USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
+
+type CategoryKey = 'all' | 'sağlık' | 'sosyal' | 'finans' | 'alışkanlık';
+
+const FILTERS: { key: CategoryKey; label: string; icon?: typeof Activity }[] = [
+  { key: 'all',        label: 'Tümü' },
+  { key: 'sağlık',    label: 'Sağlık',     icon: Activity },
+  { key: 'sosyal',     label: 'Sosyal',     icon: Users    },
+  { key: 'finans',     label: 'Finans',     icon: Coins    },
+  { key: 'alışkanlık', label: 'Alışkanlık', icon: Heart    },
 ];
 
-const categoryColors: Record<string, string> = {
-  saglik: 'hsl(142, 71%, 45%)',
-  sosyal: 'hsl(210, 80%, 55%)',
-  finans: 'hsl(38, 92%, 50%)',
-  aliskanlik: 'hsl(263, 55%, 50%)',
+const CATEGORY_COLORS: Record<string, string> = {
+  'sağlık':    '#22c55e',
+  'sosyal':    '#3b82f6',
+  'finans':    '#f97316',
+  'alışkanlık':'#8b5cf6',
 };
 
-const categoryIcons: Record<string, typeof Activity> = {
-  saglik: Activity,
-  sosyal: Users,
-  finans: Coins,
-  aliskanlik: Heart,
+const CATEGORY_ICONS: Record<string, typeof Activity> = {
+  'sağlık':    Activity,
+  'sosyal':    Users,
+  'finans':    Coins,
+  'alışkanlık':Heart,
 };
+
+interface Suggestion {
+  id: string;
+  category: string;
+  content: string;
+  reason?: string;
+  status: string;
+  generated_at: string;
+}
 
 export default function SuggestionsPage() {
-  const [filter, setFilter] = useState('all');
-  const { suggestions, acceptSuggestion, dismissSuggestion } = useSuggestions();
+  const [filter, setFilter] = useState<CategoryKey>('all');
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const filtered = filter === 'all' ? suggestions : suggestions.filter(s => s.category === filter);
+  const generateSuggestions = useCallback(async (mode: 'auto' | 'refresh' = 'auto') => {
+    setIsGenerating(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-suggestions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+          },
+          body: JSON.stringify({
+            user_id: USER_ID,
+            mode,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      console.log('Suggestions response:', data);
+
+      if (data.suggestions && data.suggestions.length > 0) {
+        setSuggestions(prev => [...(data.suggestions as Suggestion[]), ...prev]);
+      }
+    } catch (error) {
+      console.error('Generate suggestions error:', error);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, []);
+
+  const loadSuggestions = useCallback(async (category: CategoryKey = 'all') => {
+    setIsLoading(true);
+    try {
+      let query = supabase
+        .from('suggestions')
+        .select('*')
+        .eq('user_id', USER_ID)
+        .eq('status', 'pending')
+        .order('generated_at', { ascending: false });
+
+      if (category !== 'all') {
+        query = query.eq('category', category);
+      }
+
+      const { data, error } = await query;
+      console.log('Suggestions:', data, error);
+
+      if (data && data.length > 0) {
+        setSuggestions(data as Suggestion[]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const refreshSuggestions = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0];
+    await supabase
+      .from('suggestions')
+      .delete()
+      .eq('user_id', USER_ID)
+      .eq('status', 'pending')
+      .gte('generated_at', `${today}T00:00:00.000Z`);
+    setSuggestions([]);
+    await generateSuggestions('refresh');
+  }, [generateSuggestions]);
+
+  const handleAccept = async (id: string) => {
+    await supabase
+      .from('suggestions')
+      .update({ status: 'accepted', responded_at: new Date().toISOString() })
+      .eq('id', id);
+    setSuggestions(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleSkip = async (id: string) => {
+    await supabase
+      .from('suggestions')
+      .update({ status: 'skipped', responded_at: new Date().toISOString() })
+      .eq('id', id);
+    setSuggestions(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleFilterChange = (key: CategoryKey) => {
+    setFilter(key);
+    void loadSuggestions(key);
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: todaySuggestions } = await supabase
+        .from('suggestions')
+        .select('id')
+        .eq('user_id', USER_ID)
+        .eq('status', 'pending')
+        .gte('generated_at', `${today}T00:00:00.000Z`)
+        .lte('generated_at', `${today}T23:59:59.999Z`)
+        .limit(1);
+
+      if (!todaySuggestions || todaySuggestions.length === 0) {
+        // No suggestions for today — auto-generate (4 total, 1 per category)
+        await generateSuggestions('auto');
+      } else {
+        // Already generated today — just load them
+        await loadSuggestions('all');
+      }
+    };
+    void init();
+  }, [generateSuggestions, loadSuggestions]);
+
+  const filtered = filter === 'all'
+    ? suggestions
+    : suggestions.filter(s => s.category === filter);
+
+  const showSpinner = isLoading || isGenerating;
 
   return (
     <div className="pb-24 max-w-[430px] mx-auto animate-fade-in">
-      <div className="flex items-center justify-between p-4">
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <h1 className="text-lg font-semibold">Tavsiyeler</h1>
-        <Filter className="w-5 h-5 text-muted-foreground" />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void refreshSuggestions()}
+            disabled={isGenerating}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border text-xs font-medium text-muted-foreground active:scale-95 disabled:opacity-50"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", isGenerating && "animate-spin")} />
+            Yenile
+          </button>
+          <Filter className="w-5 h-5 text-muted-foreground" />
+        </div>
       </div>
 
       {/* Filter Chips */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-4 -mx-0">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-4">
         {FILTERS.map(f => (
           <button
             key={f.key}
-            onClick={() => setFilter(f.key)}
+            onClick={() => handleFilterChange(f.key)}
             className={cn(
               "px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-colors active:scale-95",
-              filter === f.key ? "bg-primary text-primary-foreground" : "bg-card border border-border text-foreground"
+              filter === f.key
+                ? "bg-primary text-primary-foreground"
+                : "bg-card border border-border text-foreground"
             )}
           >
             {f.label}
@@ -54,43 +200,54 @@ export default function SuggestionsPage() {
         ))}
       </div>
 
-      {/* Suggestions List */}
+      {/* Content */}
       <div className="px-4 space-y-3">
-        {filtered.length === 0 ? (
+        {showSpinner ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+            <p className="text-sm text-muted-foreground">
+              {isGenerating ? 'Zeeky tavsiyeler hazırlıyor...' : 'Yükleniyor...'}
+            </p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-4xl mb-3">💡</p>
             <p className="text-sm text-muted-foreground">Bu kategoride tavsiye yok</p>
           </div>
         ) : (
           filtered.map(s => {
-            const Icon = categoryIcons[s.category] || Activity;
-            const color = categoryColors[s.category] || 'hsl(263, 55%, 50%)';
+            const Icon  = CATEGORY_ICONS[s.category] ?? Activity;
+            const color = CATEGORY_COLORS[s.category] ?? '#8b5cf6';
             return (
-              <div key={s.id} className={cn("bg-card border border-border rounded-2xl p-4 transition-all", s.accepted && "opacity-60")}>
+              <div key={s.id} className="bg-card border border-border rounded-2xl p-4">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: color + '20', color }}>
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: color + '20', color }}
+                  >
                     <Icon size={20} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium leading-snug">{s.text}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{s.basedOn}</p>
+                    <p className="text-sm font-medium leading-snug">{s.content}</p>
+                    {s.reason && (
+                      <p className="text-xs text-muted-foreground mt-1">{s.reason}</p>
+                    )}
                   </div>
                 </div>
-                {!s.accepted && (
-                  <div className="flex gap-2">
-                    <button onClick={() => acceptSuggestion(s.id)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-success/10 text-success rounded-xl text-sm font-medium active:scale-95 transition-transform">
-                      <Check className="w-4 h-4" /> Kabul Et
-                    </button>
-                    <button onClick={() => dismissSuggestion(s.id)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-destructive/10 text-destructive rounded-xl text-sm font-medium active:scale-95 transition-transform">
-                      <X className="w-4 h-4" /> Geç
-                    </button>
-                  </div>
-                )}
-                {s.accepted && (
-                  <div className="flex items-center gap-1.5 text-success text-xs font-medium">
-                    <Check className="w-4 h-4" /> Kabul edildi
-                  </div>
-                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void handleAccept(s.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-success/10 text-success rounded-xl text-sm font-medium active:scale-95 transition-transform"
+                  >
+                    <Check className="w-4 h-4" /> Kabul Et
+                  </button>
+                  <button
+                    onClick={() => void handleSkip(s.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-destructive/10 text-destructive rounded-xl text-sm font-medium active:scale-95 transition-transform"
+                  >
+                    <X className="w-4 h-4" /> Geç
+                  </button>
+                </div>
               </div>
             );
           })

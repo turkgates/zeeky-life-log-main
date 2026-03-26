@@ -5,6 +5,7 @@ import { TEST_USER_ID } from '@/lib/activitySupabase';
 import { supabase } from '@/lib/supabase';
 import { ActionCategory } from '@/types/zeeky';
 import { cn } from '@/lib/utils';
+import { useChatStore } from '@/store/useChatStore';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
@@ -16,36 +17,38 @@ function getGreeting() {
   return 'İyi akşamlar';
 }
 
-interface ChatMessage {
-  id: string;
-  role: 'assistant' | 'user';
-  text: string;
-}
 
 const CATEGORY_GRID: { category: ActionCategory | 'custom'; label: string; icon: typeof MapPin; color: string }[] = [
-  { category: 'gittim',   label: 'Gittim',      icon: MapPin,      color: '#1E88E5' },
-  { category: 'yaptim',   label: 'Yaptım',       icon: CheckCircle, color: '#43A047' },
-  { category: 'harcama',  label: 'Harcama',      icon: Wallet,      color: '#FB8C00' },
-  { category: 'uyudum',   label: 'Uyudum',       icon: Moon,        color: '#7B1FA2' },
-  { category: 'izledim',  label: 'İzledim',      icon: Play,        color: '#E91E63' },
-  { category: 'custom',   label: 'Özel Eylem',   icon: Plus,        color: '#78909C' },
+  { category: 'gittim',  label: 'Gittim',    icon: MapPin,      color: '#1E88E5' },
+  { category: 'yaptim',  label: 'Yaptım',    icon: CheckCircle, color: '#43A047' },
+  { category: 'harcama', label: 'Harcama',   icon: Wallet,      color: '#FB8C00' },
+  { category: 'uyudum',  label: 'Uyudum',    icon: Moon,        color: '#7B1FA2' },
+  { category: 'izledim', label: 'İzledim',   icon: Play,        color: '#E91E63' },
+  { category: 'custom',  label: 'Özel Eylem',icon: Plus,        color: '#78909C' },
 ];
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const {
+    messages, isLoaded, offset, hasMore,
+    setMessages, prependMessages, addMessage,
+    setLoaded, setOffset, setHasMore,
+  } = useChatStore();
+
   const [userName, setUserName] = useState('');
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '0', role: 'assistant', text: 'Merhaba! Ben Zeeky. Bugün nasıl geçti? Ne yaptığını anlat, sana yardımcı olayım. 🌟' },
-  ]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(!isLoaded);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const recognitionRef = useRef<any>(null);
-  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const todayDate = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
+  // Load user name
   useEffect(() => {
     supabase
       .from('users')
@@ -53,27 +56,99 @@ export default function HomePage() {
       .eq('id', TEST_USER_ID)
       .single()
       .then(({ data }) => {
-        if (data?.full_name) setUserName(data.full_name.split(' ')[0]);
+        if (data?.full_name) setUserName((data.full_name as string).split(' ')[0]);
       });
   }, []);
 
-  useEffect(() => {
-    const el = chatScrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isChatLoading]);
+  const loadHistory = useCallback(async (fetchOffset = 0, prepend = false) => {
+    const today = new Date().toISOString().split('T')[0];
 
-  const addMessage = useCallback((msg: { role: 'user' | 'assistant'; content: string }) => {
-    setMessages(prev => [
-      ...prev,
-      {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        role: msg.role,
-        text: msg.content,
-      },
-    ]);
-  }, []);
+    const { data, count } = await supabase
+      .from('conversations')
+      .select('role, content, created_at', { count: 'exact' })
+      .eq('user_id', TEST_USER_ID)
+      .gte('created_at', `${today}T00:00:00.000Z`)
+      .lte('created_at', `${today}T23:59:59.999Z`)
+      .order('created_at', { ascending: false })
+      .range(fetchOffset, fetchOffset + 9);
+
+    console.log('Today history:', data?.length, 'total:', count);
+
+    if (!data || data.length === 0) {
+      if (fetchOffset === 0) {
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: 'Merhaba! Ben Zeeky. Bugün nasıl geçti? ✨',
+          created_at: new Date().toISOString(),
+        }]);
+      }
+      setHasMore(false);
+      setLoaded(true);
+      return;
+    }
+
+    // Fetched descending — reverse to chronological order
+    const sorted = [...data].reverse().map((msg, i) => ({
+      id: `${fetchOffset + i}-${msg.created_at as string}`,
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content as string,
+      created_at: msg.created_at as string,
+    }));
+
+    if (prepend) {
+      const container = messagesContainerRef.current;
+      const prevScrollHeight = container?.scrollHeight ?? 0;
+      prependMessages(sorted);
+      requestAnimationFrame(() => {
+        if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
+      });
+    } else {
+      setMessages(sorted);
+    }
+
+    setHasMore((count ?? 0) > fetchOffset + 10);
+    setOffset(fetchOffset + 10);
+    setLoaded(true);
+  }, [setMessages, prependMessages, setHasMore, setOffset, setLoaded]);
+
+  // Load on mount (skip if already loaded from a previous visit)
+  useEffect(() => {
+    if (isLoaded) return;
+    setIsLoadingHistory(true);
+    void loadHistory(0, false).finally(() => setIsLoadingHistory(false));
+  }, [isLoaded, loadHistory]);
+
+  // Instant scroll to bottom after initial load
+  useEffect(() => {
+    if (isLoaded && messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+    }
+  }, [isLoaded]);
+
+  // Smooth scroll on each new message
+  useEffect(() => {
+    if (!isLoaded) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, isLoaded]);
+
+  // Pull older messages when scrolled to top
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container || container.scrollTop !== 0 || !hasMore || isLoadingMore) return;
+    setIsLoadingMore(true);
+    void loadHistory(offset, true).finally(() => setIsLoadingMore(false));
+  }, [hasMore, isLoadingMore, loadHistory, offset]);
 
   const sendMessage = useCallback(async (userMessage: string) => {
+    // Append user message immediately
+    addMessage({
+      id: Date.now().toString(),
+      role: 'user',
+      content: userMessage,
+      created_at: new Date().toISOString(),
+    });
+
     try {
       setIsChatLoading(true);
 
@@ -84,8 +159,6 @@ export default function HomePage() {
         .single();
       const personality = profileData?.ai_personality || 'balanced';
 
-      console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
-      console.log('Function URL:', zeekyChatUrl);
       const response = await fetch(zeekyChatUrl, {
         method: 'POST',
         headers: {
@@ -100,12 +173,23 @@ export default function HomePage() {
         }),
       });
       const data = await response.json();
+
       if (data.reply) {
-        addMessage({ role: 'assistant', content: data.reply });
+        addMessage({
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.reply as string,
+          created_at: new Date().toISOString(),
+        });
       }
     } catch (error) {
       console.error('Hata:', error);
-      addMessage({ role: 'assistant', content: 'Bir sorun oluştu, tekrar dene.' });
+      addMessage({
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Bir sorun oluştu, tekrar dene.',
+        created_at: new Date().toISOString(),
+      });
     } finally {
       setIsChatLoading(false);
     }
@@ -114,10 +198,9 @@ export default function HomePage() {
   const submitChat = useCallback(() => {
     if (!chatInput.trim() || isChatLoading) return;
     const text = chatInput.trim();
-    addMessage({ role: 'user', content: text });
     setChatInput('');
     void sendMessage(text);
-  }, [chatInput, isChatLoading, addMessage, sendMessage]);
+  }, [chatInput, isChatLoading, sendMessage]);
 
   const startRecording = () => {
     const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
@@ -178,43 +261,56 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Chat card — fills remaining space */}
+      {/* Chat card */}
       <div className="flex-1 mx-4 mb-2 flex flex-col bg-card rounded-2xl shadow-md border border-border overflow-hidden min-h-0">
 
         {/* Messages */}
         <div
-          ref={chatScrollRef}
-          className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-hide"
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-2 py-3 scrollbar-hide"
         >
-          {messages.map(msg => (
-            <div key={msg.id} className={cn("flex items-end gap-2", msg.role === 'user' ? "justify-end" : "justify-start")}>
-              {msg.role === 'assistant' && (
-                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mb-0.5">
-                  <span className="text-[11px] font-bold text-primary-foreground">Z</span>
-                </div>
-              )}
-              <div className={cn(
-                "max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm",
-                msg.role === 'user'
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-muted text-foreground rounded-bl-sm"
-              )}>
-                {msg.text}
-              </div>
+          {isLoadingMore && (
+            <div className="text-center text-gray-400 text-xs py-2">Yükleniyor...</div>
+          )}
+          {isLoadingHistory ? (
+            <div className="flex justify-center p-4">
+              <span className="text-gray-400 text-sm">Yükleniyor...</span>
             </div>
-          ))}
-          {isChatLoading && (
-            <div className="flex items-end gap-2 justify-start">
-              <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mb-0.5">
-                <span className="text-[11px] font-bold text-primary-foreground">Z</span>
+          ) : (
+            messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-3 px-2`}
+              >
+                {msg.role === 'assistant' && (
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 mt-1">
+                    Z
+                  </div>
+                )}
+                <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${
+                  msg.role === 'user'
+                    ? 'bg-blue-600 text-white rounded-br-none'
+                    : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                }`}>
+                  {msg.content}
+                </div>
               </div>
-              <div className="px-3.5 py-3 rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm flex items-center gap-1.5 shadow-sm">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+            ))
+          )}
+          {isChatLoading && (
+            <div className="flex justify-start mb-3 px-2">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 mt-1">
+                Z
+              </div>
+              <div className="px-3 py-2 rounded-2xl rounded-bl-none bg-gray-100 text-sm flex items-center gap-1.5">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Quick actions */}

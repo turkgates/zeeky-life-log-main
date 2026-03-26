@@ -94,6 +94,26 @@ export default function FinancePage() {
   const fetchAiSuggestion = useCallback(async () => {
     setAiLoading(true);
     try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // 1. Check if today's suggestion already exists
+      const { data: existing } = await supabase
+        .from('suggestions')
+        .select('content, generated_at')
+        .eq('user_id', TX_USER_ID)
+        .eq('category', 'finans')
+        .gte('generated_at', `${today}T00:00:00.000Z`)
+        .lte('generated_at', `${today}T23:59:59.999Z`)
+        .order('generated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (existing?.content) {
+        setAiSuggestion(existing.content);
+        return;
+      }
+
+      // 2. No cached suggestion — fetch from API
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const endOfMonth   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
@@ -126,8 +146,17 @@ export default function FinancePage() {
       const data = await response.json();
       console.log('Finance advice response:', data);
       const cleanReply = data.reply?.trim();
+
       if (cleanReply && cleanReply.length > 10) {
         setAiSuggestion(cleanReply);
+        // 3. Save to suggestions table
+        await supabase.from('suggestions').insert({
+          user_id: TX_USER_ID,
+          category: 'finans',
+          content: cleanReply,
+          status: 'pending',
+          generated_at: new Date().toISOString(),
+        });
       } else {
         setAiSuggestion(null);
       }
@@ -138,6 +167,18 @@ export default function FinancePage() {
       setAiLoading(false);
     }
   }, [currencySymbol]);
+
+  // Helper: invalidate today's cached suggestion then regenerate
+  const invalidateAndRefreshAdvice = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0];
+    await supabase
+      .from('suggestions')
+      .delete()
+      .eq('user_id', TX_USER_ID)
+      .eq('category', 'finans')
+      .gte('generated_at', `${today}T00:00:00.000Z`);
+    void fetchAiSuggestion();
+  }, [fetchAiSuggestion]);
 
   useEffect(() => {
     if (!txLoading) void fetchAiSuggestion();
@@ -465,7 +506,7 @@ export default function FinancePage() {
           currencySymbol={currencySymbol}
           currencyCode={currencyCode}
           onClose={() => setShowAdd(false)}
-          onSaved={() => { setShowAdd(false); void loadTransactions(); toast.success('İşlem eklendi ✅'); }}
+          onSaved={() => { setShowAdd(false); void loadTransactions(); void invalidateAndRefreshAdvice(); toast.success('İşlem eklendi ✅'); }}
         />
       )}
 

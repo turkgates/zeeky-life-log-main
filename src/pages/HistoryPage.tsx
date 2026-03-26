@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, X, InboxIcon, Star, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import CategoryIcon from '@/components/CategoryIcon';
 import SwipeableCard from '@/components/SwipeableCard';
 import ActivityDetailSheet from '@/components/ActivityDetailSheet';
@@ -9,12 +9,9 @@ import { toast } from 'sonner';
 import {
   fetchActivitiesByDate,
   fetchFavoriteActivities,
-  fetchPendingSuggestions,
-  updateSuggestionStatus,
   quickLogFavorite,
   deleteActivityById,
   FavoriteActivity,
-  Suggestion,
   TEST_USER_ID,
 } from '@/lib/activitySupabase';
 import { supabase } from '@/lib/supabase';
@@ -65,11 +62,6 @@ export default function HistoryPage() {
   // Favorites
   const [favorites, setFavorites] = useState<FavoriteActivity[]>([]);
 
-  // Suggestions
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [activeSlide, setActiveSlide] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
   // Card state
   const [swipedCardId, setSwipedCardId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -77,11 +69,11 @@ export default function HistoryPage() {
 
   const weekDays = getWeekDays(currentWeekBase);
 
-  // ── Derive visible month from the first day of the displayed week ────────
+  // Derive visible month from the first day of the displayed week
   const viewYear  = weekDays[0].getFullYear();
   const viewMonth = weekDays[0].getMonth();
 
-  // ── Load dates that have activities for the visible month (for dots) ──────
+  // Load dates that have activities for the visible month (for dots)
   const loadDatesForMonth = useCallback(async (year: number, month: number) => {
     const startOfMonth = new Date(year, month, 1).toISOString();
     const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
@@ -100,7 +92,7 @@ export default function HistoryPage() {
     void loadDatesForMonth(viewYear, viewMonth);
   }, [viewYear, viewMonth, loadDatesForMonth, refreshKey]);
 
-  // ── Load activities for selected day ─────────────────────────────────────
+  // Load activities for selected day
   const loadDayActivities = useCallback(async (date: string) => {
     setDayLoading(true);
     try {
@@ -115,32 +107,12 @@ export default function HistoryPage() {
     void loadDayActivities(selectedDate);
   }, [selectedDate, loadDayActivities, refreshKey]);
 
-  // ── Load favorites ────────────────────────────────────────────────────────
+  // Load favorites
   useEffect(() => {
     fetchFavoriteActivities().then(setFavorites);
   }, []);
 
-  // ── Load suggestions ──────────────────────────────────────────────────────
-  useEffect(() => {
-    fetchPendingSuggestions().then(setSuggestions);
-  }, []);
-
-  // ── Suggestions scroll dot ────────────────────────────────────────────────
-  const handleScroll = useCallback(() => {
-    if (!scrollRef.current) return;
-    const el = scrollRef.current;
-    const cardWidth = el.firstElementChild?.clientWidth || 1;
-    setActiveSlide(Math.round(el.scrollLeft / cardWidth));
-  }, []);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
-
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  // Handlers
   const handleDeleteConfirm = async (id: string) => {
     const ok = await deleteActivityById(id);
     if (ok) {
@@ -149,16 +121,6 @@ export default function HistoryPage() {
     }
     setDeleteConfirm(null);
     setSwipedCardId(null);
-  };
-
-  const handleAcceptSuggestion = async (id: string) => {
-    await updateSuggestionStatus(id, 'accepted');
-    setSuggestions(prev => prev.filter(s => s.id !== id));
-  };
-
-  const handleDismissSuggestion = async (id: string) => {
-    await updateSuggestionStatus(id, 'skipped');
-    setSuggestions(prev => prev.filter(s => s.id !== id));
   };
 
   const handleQuickLog = async (fav: FavoriteActivity) => {
@@ -243,52 +205,6 @@ export default function HistoryPage() {
               </button>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* ── Suggestions ────────────────────────────────────────────────── */}
-      {suggestions.length > 0 && (
-        <div className="px-4 mb-5">
-          <h2 className="text-xs font-semibold text-muted-foreground mb-2">Öneriler</h2>
-          <div
-            ref={scrollRef}
-            className="flex gap-3 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-2"
-            style={{ scrollSnapType: 'x mandatory' }}
-          >
-            {suggestions.map(s => (
-              <div
-                key={s.id}
-                className="flex-shrink-0 bg-card border border-border rounded-xl p-4"
-                style={{ width: '85%', maxWidth: 320, scrollSnapAlign: 'center', whiteSpace: 'normal', wordBreak: 'break-word' }}
-              >
-                <p className="text-xs mb-3 leading-relaxed">{s.text}</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAcceptSuggestion(s.id)}
-                    className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-success/10 text-success rounded-lg text-xs font-medium active:scale-95"
-                  >
-                    <Check className="w-3.5 h-3.5" /> Kabul
-                  </button>
-                  <button
-                    onClick={() => handleDismissSuggestion(s.id)}
-                    className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-destructive/10 text-destructive rounded-lg text-xs font-medium active:scale-95"
-                  >
-                    <X className="w-3.5 h-3.5" /> Geç
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          {suggestions.length > 1 && (
-            <div className="flex justify-center gap-1.5 mt-2">
-              {suggestions.map((_, i) => (
-                <div
-                  key={i}
-                  className={cn("rounded-full transition-all", i === activeSlide ? "w-2.5 h-2.5 bg-primary" : "w-2 h-2 bg-muted-foreground/30")}
-                />
-              ))}
-            </div>
-          )}
         </div>
       )}
 
