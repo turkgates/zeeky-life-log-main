@@ -502,7 +502,6 @@ export default function FinancePage() {
       {/* ── Modals ───────────────────────────────────────────────────────── */}
       {showAdd && (
         <AddTransactionModal
-          categories={categories}
           currencySymbol={currencySymbol}
           currencyCode={currencyCode}
           onClose={() => setShowAdd(false)}
@@ -548,10 +547,43 @@ export default function FinancePage() {
   );
 }
 
+// ── Static category / subcategory maps ───────────────────────────────────────
+
+const INCOME_SUBS: Record<string, string[]> = {
+  'Maaş':        ['Aylık Maaş', 'İkramiye', 'Prim', 'Fazla Mesai'],
+  'Freelance':   ['Proje Bazlı', 'Danışmanlık', 'Yazarlık', 'Tasarım', 'Yazılım'],
+  'Yatırım':     ['Hisse Senedi', 'Kripto', 'Gayrimenkul', 'Fon', 'Faiz', 'Temettü'],
+  'Kira Geliri': ['Konut Kirası', 'İşyeri Kirası', 'Araç Kirası'],
+  'Emeklilik':   ['Emekli Maaşı', 'BES'],
+  'Burs':        ['Devlet Bursu', 'Özel Burs', 'Yurt Dışı Burs'],
+  'Yan Gelir':   ['Satış', 'Komisyon', 'Telif', 'Reklam Geliri'],
+  'Diğer Gelir': ['Hediye', 'Miras', 'Piyango', 'Diğer'],
+};
+
+const EXPENSE_SUBS: Record<string, string[]> = {
+  'Yiyecek & İçecek': ['Market', 'Restaurant', 'Kafe', 'Fast Food', 'Online Yemek', 'Alkol', 'Su & İçecek'],
+  'Ulaşım':           ['Yakıt', 'Toplu Taşıma', 'Taksi & Uber', 'Araç Bakım', 'Otopark', 'Uçak', 'Tren & Otobüs'],
+  'Eğlence':          ['Sinema', 'Konser', 'Tiyatro', 'Oyun', 'Kitap', 'Müzik', 'Spor Maçı', 'Gece Hayatı'],
+  'Faturalar':        ['Elektrik', 'Su', 'Doğalgaz', 'İnternet', 'Telefon', 'Abonelikler', 'Kablo TV'],
+  'Sağlık':           ['Doktor', 'Diş', 'İlaç', 'Hastane', 'Laboratuvar', 'Göz', 'Psikoloji'],
+  'Giyim':            ['Kıyafet', 'Ayakkabı', 'Aksesuar', 'Spor Giyim', 'İç Giyim'],
+  'Teknoloji':        ['Telefon', 'Bilgisayar', 'Tablet', 'Aksesuar', 'Yazılım', 'Oyun'],
+  'Kira & Ev':        ['Kira', 'Aidat', 'Tadilat', 'Mobilya', 'Ev Eşyası', 'Temizlik', 'Güvenlik'],
+  'Eğitim':           ['Okul Ücreti', 'Kurs', 'Kitap & Kırtasiye', 'Online Eğitim', 'Dil Kursu'],
+  'Spor':             ['Spor Salonu', 'Ekipman', 'Spor Kıyafeti', 'Yüzme', 'Yoga', 'Koçluk'],
+  'Güzellik & Bakım': ['Kuaför', 'Kozmetik', 'Cilt Bakımı', 'Masaj & SPA', 'Manikür'],
+  'Seyahat':          ['Konaklama', 'Uçak Bileti', 'Tur', 'Vize', 'Seyahat Sigortası', 'Aktivite'],
+  'Hediye':           ['Doğum Günü', 'Düğün', 'Yılbaşı', 'Bebek Hediyesi', 'Diğer Hediye'],
+  'Sigorta':          ['Sağlık Sigortası', 'Araç Sigortası', 'Konut Sigortası', 'Hayat Sigortası'],
+  'Diğer Gider':      ['Bağış', 'Para Cezası', 'Kayıp & Hasar', 'Diğer'],
+};
+
+const INCOME_CATS  = Object.keys(INCOME_SUBS);
+const EXPENSE_CATS = Object.keys(EXPENSE_SUBS);
+
 // ── Add Transaction Modal ─────────────────────────────────────────────────────
 
-function AddTransactionModal({ categories, currencySymbol, currencyCode, onClose, onSaved }: {
-  categories:     TransactionCategory[];
+function AddTransactionModal({ currencySymbol, currencyCode, onClose, onSaved }: {
   currencySymbol: string;
   currencyCode:   string;
   onClose:  () => void;
@@ -566,9 +598,8 @@ function AddTransactionModal({ categories, currencySymbol, currencyCode, onClose
   const [frequency,   setFrequency]   = useState<Recurrence>('none');
   const [saving,      setSaving]      = useState(false);
 
-  const cats = categories.filter(c => c.type === type || c.type === 'both');
-  const selectedCat = cats.find(c => c.name === category);
-  const subs = selectedCat?.subcategories ?? [];
+  const cats = type === 'income' ? INCOME_CATS : EXPENSE_CATS;
+  const subs = category ? (type === 'income' ? INCOME_SUBS[category] : EXPENSE_SUBS[category]) ?? [] : [];
 
   const handleSave = async () => {
     if (!amount || !category) { toast.error('Tutar ve kategori zorunlu'); return; }
@@ -604,11 +635,11 @@ function AddTransactionModal({ categories, currencySymbol, currencyCode, onClose
         {/* Type toggle */}
         <div className="flex bg-muted rounded-xl p-1 mb-4">
           <button
-            onClick={() => { setType('income'); setCategory(''); }}
+            onClick={() => { setType('income'); setCategory(''); setSubcategory(''); }}
             className={cn("flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors", type === 'income' ? "bg-success text-white" : "text-muted-foreground")}
           >Gelir</button>
           <button
-            onClick={() => { setType('expense'); setCategory(''); }}
+            onClick={() => { setType('expense'); setCategory(''); setSubcategory(''); }}
             className={cn("flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors", type === 'expense' ? "bg-destructive text-white" : "text-muted-foreground")}
           >Gider</button>
         </div>
@@ -627,26 +658,25 @@ function AddTransactionModal({ categories, currencySymbol, currencyCode, onClose
 
         {/* Categories */}
         <p className="text-xs font-medium text-muted-foreground mb-2">Kategori</p>
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          {cats.map(c => (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {cats.map(name => (
             <button
-              key={c.id}
-              onClick={() => { setCategory(c.name); setSubcategory(''); }}
+              key={name}
+              onClick={() => { setCategory(name); setSubcategory(''); }}
               className={cn(
-                "flex flex-col items-center gap-1 p-2.5 rounded-xl border transition-colors",
-                category === c.name ? "border-accent bg-accent/5" : "border-border"
+                "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                category === name ? "bg-accent text-accent-foreground border-accent" : "bg-muted text-muted-foreground border-transparent"
               )}
-            >
-              <span className="text-xl">{c.icon}</span>
-              <span className="text-[10px] font-medium text-center leading-tight">{c.name}</span>
-            </button>
+            >{name}</button>
           ))}
         </div>
 
         {/* Subcategories */}
         {subs.length > 0 && (
           <div className="mb-4">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Alt Kategori</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Alt Kategori <span className="text-[10px] opacity-60">(isteğe bağlı)</span>
+            </p>
             <div className="flex flex-wrap gap-2">
               {subs.map(s => (
                 <button

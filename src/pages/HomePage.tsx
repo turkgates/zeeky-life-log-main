@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bell, Plus, Send, Mic, MapPin, CheckCircle, Wallet, Moon, Play } from 'lucide-react';
+import { Bell, Plus, Send, Mic, Activity, Users, Briefcase, UtensilsCrossed, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TEST_USER_ID } from '@/lib/activitySupabase';
 import { supabase } from '@/lib/supabase';
 import { ActionCategory } from '@/types/zeeky';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/store/useChatStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
@@ -18,13 +19,13 @@ function getGreeting() {
 }
 
 
-const CATEGORY_GRID: { category: ActionCategory | 'custom'; label: string; icon: typeof MapPin; color: string }[] = [
-  { category: 'gittim',  label: 'Gittim',    icon: MapPin,      color: '#1E88E5' },
-  { category: 'yaptim',  label: 'Yaptım',    icon: CheckCircle, color: '#43A047' },
-  { category: 'harcama', label: 'Harcama',   icon: Wallet,      color: '#FB8C00' },
-  { category: 'uyudum',  label: 'Uyudum',    icon: Moon,        color: '#7B1FA2' },
-  { category: 'izledim', label: 'İzledim',   icon: Play,        color: '#E91E63' },
-  { category: 'custom',  label: 'Özel Eylem',icon: Plus,        color: '#78909C' },
+const CATEGORY_GRID: { category: ActionCategory | 'custom'; label: string; icon: typeof Activity; color: string }[] = [
+  { category: 'sağlık-spor', label: 'Sağlık',    icon: Activity,        color: '#22c55e' },
+  { category: 'sosyal',      label: 'Sosyal',     icon: Users,           color: '#3b82f6' },
+  { category: 'iş-eğitim',  label: 'İş',         icon: Briefcase,       color: '#6366f1' },
+  { category: 'yeme-içme',  label: 'Yeme',       icon: UtensilsCrossed, color: '#ef4444' },
+  { category: 'harcama',    label: 'Harcama',    icon: Wallet,          color: '#f59e0b' },
+  { category: 'custom',     label: 'Özel Eylem', icon: Plus,            color: '#94a3b8' },
 ];
 
 export default function HomePage() {
@@ -47,6 +48,17 @@ export default function HomePage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const todayDate = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const { unreadCount, setUnreadCount } = useNotificationStore();
+
+  // Fetch unread notification count on mount
+  useEffect(() => {
+    supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', TEST_USER_ID)
+      .eq('is_read', false)
+      .then(({ count }) => setUnreadCount(count ?? 0));
+  }, [setUnreadCount]);
 
   // Load user name
   useEffect(() => {
@@ -254,9 +266,14 @@ export default function HomePage() {
           </button>
           <button
             onClick={() => navigate('/notifications')}
-            className="w-10 h-10 rounded-full bg-card flex items-center justify-center border border-border"
+            className="relative w-10 h-10 rounded-full bg-card flex items-center justify-center border border-border"
           >
             <Bell className="w-5 h-5 text-muted-foreground" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
         </div>
       </div>

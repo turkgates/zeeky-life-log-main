@@ -18,16 +18,23 @@ export interface TransactionFilters {
   sort: 'newest' | 'oldest' | 'highest' | 'lowest';
 }
 
-const ALL_CATEGORIES = [
-  { key: 'yiyecek', label: 'Yiyecek', icon: '🍔' },
-  { key: 'eglence', label: 'Eğlence', icon: '🎬' },
-  { key: 'ulasim', label: 'Ulaşım', icon: '🚗' },
-  { key: 'teknoloji', label: 'Teknoloji', icon: '💻' },
-  { key: 'maas', label: 'Maaş', icon: '💰' },
-  { key: 'freelance', label: 'Freelance', icon: '💼' },
-  { key: 'yatirim', label: 'Yatırım', icon: '📈' },
-  { key: 'diger', label: 'Diğer', icon: '📦' },
+const INCOME_CATEGORIES = [
+  'Maaş', 'Freelance', 'Yatırım', 'Kira Geliri',
+  'Emeklilik', 'Burs', 'Yan Gelir', 'Diğer Gelir',
 ];
+
+const EXPENSE_CATEGORIES = [
+  'Yiyecek & İçecek', 'Ulaşım', 'Eğlence', 'Faturalar',
+  'Sağlık', 'Giyim', 'Teknoloji', 'Kira & Ev',
+  'Eğitim', 'Spor', 'Güzellik & Bakım', 'Seyahat',
+  'Hediye', 'Sigorta', 'Diğer Gider',
+];
+
+function getCategoriesForType(type: 'all' | 'income' | 'expense'): string[] {
+  if (type === 'income')  return INCOME_CATEGORIES;
+  if (type === 'expense') return EXPENSE_CATEGORIES;
+  return [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
+}
 
 const DEFAULT_FILTERS: TransactionFilters = {
   type: 'all',
@@ -60,14 +67,20 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
   const [local, setLocal] = useState<TransactionFilters>({ ...filters });
   const currencySymbol = useCurrencyStore(s => s.symbol);
 
-  const toggleCategory = (key: string) => {
+  const toggleCategory = (name: string) => {
     setLocal(prev => ({
       ...prev,
-      categories: prev.categories.includes(key)
-        ? prev.categories.filter(c => c !== key)
-        : [...prev.categories, key],
+      categories: prev.categories.includes(name)
+        ? prev.categories.filter(c => c !== name)
+        : [...prev.categories, name],
     }));
   };
+
+  const handleTypeChange = (t: 'all' | 'income' | 'expense') => {
+    setLocal(prev => ({ ...prev, type: t, categories: [] }));
+  };
+
+  const visibleCategories = getCategoriesForType(local.type);
 
   return (
     <>
@@ -87,8 +100,8 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-2 block">Tür</label>
             <div className="flex gap-2">
-              {[{ k: 'all', l: 'Tümü' }, { k: 'income', l: 'Gelir' }, { k: 'expense', l: 'Gider' }].map(t => (
-                <button key={t.k} onClick={() => setLocal(p => ({ ...p, type: t.k as any }))}
+              {([{ k: 'all', l: 'Tümü' }, { k: 'income', l: 'Gelir' }, { k: 'expense', l: 'Gider' }] as const).map(t => (
+                <button key={t.k} onClick={() => handleTypeChange(t.k)}
                   className={cn("flex-1 py-2 rounded-xl text-xs font-semibold transition-colors", local.type === t.k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
                 >{t.l}</button>
               ))}
@@ -97,12 +110,19 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
 
           {/* Categories */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Kategori</label>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Kategori
+              {local.type !== 'all' && (
+                <span className="ml-1 text-[10px] text-muted-foreground/60">
+                  ({local.type === 'income' ? 'Gelir' : 'Gider'})
+                </span>
+              )}
+            </label>
             <div className="flex flex-wrap gap-2">
-              {ALL_CATEGORIES.map(c => (
-                <button key={c.key} onClick={() => toggleCategory(c.key)}
-                  className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center gap-1", local.categories.includes(c.key) ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground")}
-                >{c.icon} {c.label}</button>
+              {visibleCategories.map(name => (
+                <button key={name} onClick={() => toggleCategory(name)}
+                  className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-colors", local.categories.includes(name) ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground")}
+                >{name}</button>
               ))}
             </div>
           </div>

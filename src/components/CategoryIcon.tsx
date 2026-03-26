@@ -1,18 +1,30 @@
-import { MapPin, CheckCircle, Wallet, Moon, Play, HelpCircle } from 'lucide-react';
+import {
+  Activity, Users, Briefcase, Film, ShoppingCart,
+  UtensilsCrossed, Plane, Home, Wallet, MoreHorizontal,
+  MapPin, CheckCircle, Moon, Play,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const CATEGORY_MAP: Record<string, { icon: React.ElementType; color: string }> = {
-  gittim:   { icon: MapPin,        color: '#1E88E5' },
-  yaptim:   { icon: CheckCircle,   color: '#43A047' },
-  harcama:  { icon: Wallet,        color: '#FB8C00' },
-  uyudum:   { icon: Moon,          color: '#7B1FA2' },
-  izledim:  { icon: Play,          color: '#E91E63' },
-  spor:     { icon: CheckCircle,   color: '#43A047' },
-  sosyal:   { icon: MapPin,        color: '#1E88E5' },
-  sağlık:   { icon: Moon,          color: '#7B1FA2' },
-  iş:       { icon: CheckCircle,   color: '#78909C' },
-  eğlence:  { icon: Play,          color: '#E91E63' },
-  diğer:    { icon: HelpCircle,    color: '#78909C' },
+const CATEGORY_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+  // New categories
+  'sağlık-spor': { icon: Activity,        color: '#22c55e', label: 'Sağlık & Spor' },
+  'sosyal':      { icon: Users,           color: '#3b82f6', label: 'Sosyal'         },
+  'iş-eğitim':  { icon: Briefcase,       color: '#6366f1', label: 'İş & Eğitim'    },
+  'eğlence':    { icon: Film,            color: '#ec4899', label: 'Eğlence'        },
+  'alışveriş':  { icon: ShoppingCart,    color: '#f97316', label: 'Alışveriş'      },
+  'yeme-içme':  { icon: UtensilsCrossed, color: '#ef4444', label: 'Yeme & İçme'    },
+  'seyahat':    { icon: Plane,           color: '#0ea5e9', label: 'Seyahat'        },
+  'ev-yaşam':   { icon: Home,            color: '#84cc16', label: 'Ev & Yaşam'     },
+  'harcama':    { icon: Wallet,          color: '#f59e0b', label: 'Harcama'        },
+  'diğer':      { icon: MoreHorizontal,  color: '#94a3b8', label: 'Diğer'          },
+  // Legacy categories (backward compat)
+  'gittim':     { icon: MapPin,          color: '#1E88E5', label: 'Gittim'         },
+  'yaptim':     { icon: CheckCircle,     color: '#43A047', label: 'Yaptım'         },
+  'uyudum':     { icon: Moon,            color: '#7B1FA2', label: 'Uyudum'         },
+  'izledim':    { icon: Play,            color: '#E91E63', label: 'İzledim'        },
+  'spor':       { icon: Activity,        color: '#22c55e', label: 'Spor'           },
+  'sağlık':     { icon: Activity,        color: '#22c55e', label: 'Sağlık'         },
+  'iş':         { icon: Briefcase,       color: '#6366f1', label: 'İş'             },
 };
 
 export default function CategoryIcon({
@@ -22,7 +34,8 @@ export default function CategoryIcon({
   category: string;
   size?: 'sm' | 'md' | 'lg';
 }) {
-  const config = CATEGORY_MAP[category?.toLowerCase?.() ?? ''] ?? CATEGORY_MAP['diğer']!;
+  const key    = category?.toLowerCase?.()?.trim() ?? '';
+  const config = CATEGORY_CONFIG[key] ?? CATEGORY_CONFIG['diğer']!;
   const { icon: Icon, color } = config;
 
   const sizeClass = size === 'sm' ? 'w-8 h-8' : size === 'lg' ? 'w-12 h-12' : 'w-10 h-10';
@@ -37,3 +50,5 @@ export default function CategoryIcon({
     </div>
   );
 }
+
+export { CATEGORY_CONFIG };
