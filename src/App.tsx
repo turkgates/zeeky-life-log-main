@@ -13,6 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import FinancePage from "./pages/FinancePage";
 import NotificationsPage from "./pages/NotificationsPage";
+import FriendsPage from "./pages/FriendsPage";
 import NotFound from "./pages/NotFound";
 import { getUserCurrency } from "@/lib/supabase";
 import { useCurrencyStore } from "@/store/useCurrencyStore";
@@ -48,6 +49,7 @@ const App = () => (
               <Route path="/finance" element={<FinancePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/friends" element={<FriendsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

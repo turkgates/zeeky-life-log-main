@@ -54,11 +54,14 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
 
   const starRating = activity.category === 'uyudum' ? quality : activity.category === 'izledim' ? rating : undefined;
 
-  const mapUrl = location
-    ? `https://staticmap.openstreetmap.de/staticmap.php?center=${location.lat},${location.lng}&zoom=15&size=580x280&markers=${location.lat},${location.lng},red-pushpin`
+  const hasCoords = location && location.lat != null && location.lng != null
+    && !Number.isNaN(location.lat) && !Number.isNaN(location.lng);
+
+  const mapUrl = hasCoords
+    ? `https://staticmap.openstreetmap.de/staticmap.php?center=${location!.lat},${location!.lng}&zoom=15&size=580x280&markers=${location!.lat},${location!.lng},red-pushpin`
     : null;
-  const googleMapsUrl = location
-    ? `https://www.google.com/maps?q=${location.lat},${location.lng}`
+  const googleMapsUrl = hasCoords
+    ? `https://www.google.com/maps?q=${location!.lat},${location!.lng}`
     : locationName
       ? `https://www.google.com/maps/search/${encodeURIComponent(locationName)}`
       : null;

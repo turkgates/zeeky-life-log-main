@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2 } from 'lucide-react';
 import CategoryIcon from '@/components/CategoryIcon';
 import SwipeableCard from '@/components/SwipeableCard';
 import ActivityDetailSheet from '@/components/ActivityDetailSheet';
@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 import {
   fetchActivitiesByDate,
   fetchFavoriteActivities,
-  quickLogFavorite,
   deleteActivityById,
   FavoriteActivity,
   TEST_USER_ID,
@@ -61,6 +60,9 @@ export default function HistoryPage() {
 
   // Favorites
   const [favorites, setFavorites] = useState<FavoriteActivity[]>([]);
+  const [favActionSheet, setFavActionSheet] = useState<FavoriteActivity | null>(null);
+  const [favDeleteConfirm, setFavDeleteConfirm] = useState<FavoriteActivity | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Card state
   const [swipedCardId, setSwipedCardId] = useState<string | null>(null);
@@ -108,9 +110,14 @@ export default function HistoryPage() {
   }, [selectedDate, loadDayActivities, refreshKey]);
 
   // Load favorites
-  useEffect(() => {
-    fetchFavoriteActivities().then(setFavorites);
+  const loadFavorites = useCallback(async () => {
+    const list = await fetchFavoriteActivities();
+    setFavorites(list);
   }, []);
+
+  useEffect(() => {
+    void loadFavorites();
+  }, [loadFavorites]);
 
   // Handlers
   const handleDeleteConfirm = async (id: string) => {
@@ -124,14 +131,85 @@ export default function HistoryPage() {
   };
 
   const handleQuickLog = async (fav: FavoriteActivity) => {
-    const ok = await quickLogFavorite(fav);
-    if (ok) {
-      toast.success(`${fav.title} kaydedildi ✅`);
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('activities')
+      .insert({
+        user_id:      TEST_USER_ID,
+        title:        fav.title,
+        category:     fav.category,
+        amount:       fav.amount ?? null,
+        duration_mins: fav.duration_mins ?? null,
+        location:     fav.location ?? null,
+        people:       fav.people ?? [],
+        activity_date: now,
+        created_via:  'manual',
+        raw_message:  fav.raw_message ?? fav.title,
+        is_favorite:  false,
+      });
+
+    console.log('Quick log result:', data, error);
+
+    if (!error) {
+      toast.success(`"${fav.title}" bugüne eklendi!`);
       const today = toYMD(new Date());
       if (selectedDate === today) void loadDayActivities(today);
       void loadDatesForMonth(viewYear, viewMonth);
     } else {
-      toast.error('Kaydedilemedi, tekrar dene.');
+      toast.error('Eklenirken hata oluştu');
+      console.error('Quick log error:', error);
+    }
+  };
+
+  const removeFromFavorites = async (fav: FavoriteActivity) => {
+    const { error } = await supabase
+      .from('activities')
+      .update({ is_favorite: false })
+      .eq('id', fav.id)
+      .eq('user_id', TEST_USER_ID);
+    if (!error) {
+      toast.success('Favorilerden çıkarıldı');
+      await loadFavorites();
+    } else {
+      toast.error('Hata oluştu');
+    }
+    setFavActionSheet(null);
+  };
+
+  const deleteFavorite = async (fav: FavoriteActivity) => {
+    setFavActionSheet(null);
+    setFavDeleteConfirm(fav);
+  };
+
+  const confirmDeleteFavorite = async (fav: FavoriteActivity) => {
+    const { error } = await supabase
+      .from('activities')
+      .delete()
+      .eq('id', fav.id)
+      .eq('user_id', TEST_USER_ID);
+    if (!error) {
+      toast.success('Eylem silindi');
+      await loadFavorites();
+      void loadDayActivities(selectedDate);
+      void loadDatesForMonth(viewYear, viewMonth);
+    } else {
+      toast.error('Silinemedi');
+    }
+    setFavDeleteConfirm(null);
+  };
+
+  // Long press handlers for favorite cards
+  const handleFavPressStart = (fav: FavoriteActivity) => {
+    longPressTimerRef.current = setTimeout(() => {
+      setFavActionSheet(fav);
+    }, 500);
+  };
+
+  const handleFavPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
     }
   };
 
@@ -195,14 +273,31 @@ export default function HistoryPage() {
           </h2>
           <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">
             {favorites.map(fav => (
-              <button
+              <div
                 key={fav.id}
-                onClick={() => handleQuickLog(fav)}
-                className="flex-shrink-0 flex flex-col items-center gap-2 p-3 bg-card rounded-xl border border-border active:scale-95 transition-transform min-w-[80px]"
+                className="flex-shrink-0 relative min-w-[80px]"
               >
-                <CategoryIcon category={fav.category as import('@/types/zeeky').ActionCategory} size="sm" />
-                <span className="text-xs font-medium text-foreground text-center line-clamp-2">{fav.title}</span>
-              </button>
+                <button
+                  onClick={() => handleQuickLog(fav)}
+                  onMouseDown={() => handleFavPressStart(fav)}
+                  onMouseUp={handleFavPressEnd}
+                  onMouseLeave={handleFavPressEnd}
+                  onTouchStart={() => handleFavPressStart(fav)}
+                  onTouchEnd={handleFavPressEnd}
+                  onContextMenu={e => { e.preventDefault(); setFavActionSheet(fav); }}
+                  className="flex flex-col items-center gap-2 p-3 bg-card rounded-xl border border-border active:scale-95 transition-transform w-full select-none"
+                >
+                  <CategoryIcon category={fav.category as import('@/types/zeeky').ActionCategory} size="sm" />
+                  <span className="text-xs font-medium text-foreground text-center line-clamp-2">{fav.title}</span>
+                </button>
+                {/* "..." menu trigger */}
+                <button
+                  onClick={e => { e.stopPropagation(); setFavActionSheet(fav); }}
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center"
+                >
+                  <MoreHorizontal className="w-3 h-3 text-muted-foreground" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -278,6 +373,114 @@ export default function HistoryPage() {
             setSelectedActivity(null);
           }}
         />
+      )}
+
+      {/* ── Favorite Action Sheet ──────────────────────────────────────── */}
+      {favActionSheet && (
+        <>
+          <div
+            className="fixed inset-0 z-[300] bg-black/50"
+            onClick={() => setFavActionSheet(null)}
+          />
+          <div
+            className="fixed inset-x-0 bottom-0 z-[301] bg-card rounded-t-3xl shadow-2xl"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
+          >
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+            </div>
+
+            {/* Activity name */}
+            <div className="px-5 py-3 border-b border-border">
+              <div className="flex items-center gap-3">
+                <CategoryIcon category={favActionSheet.category as import('@/types/zeeky').ActionCategory} size="sm" />
+                <div>
+                  <p className="text-sm font-semibold">{favActionSheet.title}</p>
+                  <p className="text-xs text-muted-foreground">Favori eylem</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-4 py-2 space-y-1">
+              <button
+                onClick={() => {
+                  setFavActionSheet(null);
+                  navigate('/add', { state: { editId: favActionSheet.id, category: favActionSheet.category } });
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl active:bg-muted transition-colors text-left"
+              >
+                <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
+                  <Edit2 className="w-4 h-4 text-blue-600" />
+                </div>
+                <span className="text-sm font-medium">Düzenle</span>
+              </button>
+
+              <button
+                onClick={() => void removeFromFavorites(favActionSheet)}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl active:bg-muted transition-colors text-left"
+              >
+                <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+                  <StarOff className="w-4 h-4 text-amber-600" />
+                </div>
+                <span className="text-sm font-medium">Favoriden Çıkar</span>
+              </button>
+
+              <button
+                onClick={() => void deleteFavorite(favActionSheet)}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl active:bg-muted transition-colors text-left"
+              >
+                <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </div>
+                <span className="text-sm font-medium text-destructive">Sil</span>
+              </button>
+            </div>
+
+            {/* Cancel */}
+            <div className="px-4 pb-4">
+              <button
+                onClick={() => setFavActionSheet(null)}
+                className="w-full py-3.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm active:opacity-70"
+              >
+                İptal
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Favorite Delete Confirmation ───────────────────────────────── */}
+      {favDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[400] flex items-end justify-center bg-black/50 pb-6"
+          onClick={() => setFavDeleteConfirm(null)}
+        >
+          <div
+            className="bg-card rounded-2xl p-5 mx-4 shadow-xl w-full max-w-[400px]"
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="text-base font-semibold text-center mb-1">Eylemi sil</p>
+            <p className="text-sm text-muted-foreground text-center mb-5">
+              <span className="font-medium text-foreground">"{favDeleteConfirm.title}"</span> kalıcı olarak silinecek. Emin misin?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setFavDeleteConfirm(null)}
+                className="flex-1 py-3 rounded-xl bg-muted text-muted-foreground font-semibold text-sm"
+              >
+                İptal
+              </button>
+              <button
+                onClick={() => void confirmDeleteFavorite(favDeleteConfirm)}
+                className="flex-1 py-3 rounded-xl bg-destructive text-white font-semibold text-sm"
+              >
+                Sil
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

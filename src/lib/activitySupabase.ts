@@ -3,7 +3,14 @@ import type { Activity, ActionCategory } from '@/types/zeeky';
 
 export const TEST_USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
 
-const CATEGORIES: ActionCategory[] = ['gittim', 'yaptim', 'harcama', 'uyudum', 'izledim'];
+const CATEGORIES: ActionCategory[] = [
+  // New categories
+  'sağlık-spor', 'sosyal', 'iş-eğitim', 'eğlence',
+  'alışveriş', 'yeme-içme', 'seyahat', 'ev-yaşam',
+  'harcama', 'diğer',
+  // Legacy
+  'gittim', 'yaptim', 'uyudum', 'izledim', 'spor', 'sağlık', 'iş',
+];
 
 function isActionCategory(s: string): s is ActionCategory {
   return CATEGORIES.includes(s as ActionCategory);
@@ -14,7 +21,7 @@ export function mapRowToActivity(row: Record<string, unknown>): Activity {
 
   const rawCategory = typeof row.category === 'string' ? row.category.trim() : '';
   const lowered = rawCategory.toLowerCase();
-  const normalizedCategory = (CATEGORIES.find(c => c.toLowerCase() === lowered) ?? 'gittim') as ActionCategory;
+  const normalizedCategory = (CATEGORIES.find(c => c.toLowerCase() === lowered) ?? 'diğer') as ActionCategory;
 
   const title = typeof row.title === 'string' ? row.title : '';
 
@@ -160,6 +167,11 @@ export interface FavoriteActivity {
   id: string;
   category: string;
   title: string;
+  amount?: number | null;
+  duration_mins?: number | null;
+  location?: string | null;
+  people?: string[];
+  raw_message?: string | null;
   note?: string;
   details?: Record<string, unknown>;
 }
@@ -178,31 +190,34 @@ export async function fetchFavoriteActivities(): Promise<FavoriteActivity[]> {
     return [];
   }
   return (data || []).map(row => ({
-    id: String(row.id),
-    category: typeof row.category === 'string' ? row.category : 'gittim',
-    title: typeof row.title === 'string' ? row.title : '',
-    note: typeof row.note === 'string' ? row.note : undefined,
-    details: row.details && typeof row.details === 'object' && !Array.isArray(row.details)
-      ? row.details as Record<string, unknown>
-      : undefined,
+    id:            String(row.id),
+    category:      typeof row.category === 'string' ? row.category : 'diğer',
+    title:         typeof row.title === 'string' ? row.title : '',
+    amount:        typeof row.amount === 'number' ? row.amount : null,
+    duration_mins: typeof row.duration_mins === 'number' ? row.duration_mins : null,
+    location:      typeof row.location === 'string' ? row.location : null,
+    people:        Array.isArray(row.people) ? row.people as string[] : [],
+    raw_message:   typeof row.raw_message === 'string' ? row.raw_message : null,
+    note:          typeof row.note === 'string' ? row.note : undefined,
+    details:       row.details && typeof row.details === 'object' && !Array.isArray(row.details)
+                     ? row.details as Record<string, unknown>
+                     : undefined,
   }));
 }
 
 export async function quickLogFavorite(fav: FavoriteActivity): Promise<boolean> {
-  const todayStr = new Date().toISOString().split('T')[0];
-
   const { error } = await supabase.from('activities').insert({
-    user_id: TEST_USER_ID,
-    title: fav.title,
-    category: fav.category,
-    amount: fav.details?.amount ?? null,
-    duration_mins: fav.details?.duration ?? null,
-    location: fav.details?.location ?? null,
-    people: fav.details?.companions ?? null,
+    user_id:      TEST_USER_ID,
+    title:        fav.title,
+    category:     fav.category,
+    amount:       fav.amount ?? null,
+    duration_mins: fav.duration_mins ?? null,
+    location:     fav.location ?? null,
+    people:       fav.people ?? [],
     activity_date: new Date().toISOString(),
-    created_via: 'quick_log',
-    raw_message: null,
-    is_favorite: false,
+    created_via:  'quick_log',
+    raw_message:  fav.raw_message ?? fav.title,
+    is_favorite:  true,
   });
 
   if (error) {

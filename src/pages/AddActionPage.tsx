@@ -1,25 +1,25 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, X as XIcon, Star } from 'lucide-react';
+import { ArrowLeft, Loader2, Star } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { TEST_USER_ID } from '@/lib/activitySupabase';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { FriendAutocomplete } from '@/components/FriendAutocomplete';
 
 // ── Category definitions ─────────────────────────────────────────────────────
 const CATEGORIES = [
-  { id: 'sağlık-spor', emoji: '🏃', label: 'Sağlık & Spor', desc: 'Koşu, yüzme, doktor...',     color: '#22c55e' },
-  { id: 'sosyal',      emoji: '👥', label: 'Sosyal',         desc: 'Arkadaş, aile, buluşma...', color: '#3b82f6' },
+  { id: 'sağlık-spor', emoji: '🏃', label: 'Sağlık & Spor', desc: 'Koşu, yüzme, doktor...',      color: '#22c55e' },
+  { id: 'sosyal',      emoji: '👥', label: 'Sosyal',         desc: 'Arkadaş, aile, buluşma...',  color: '#3b82f6' },
   { id: 'iş-eğitim',  emoji: '💼', label: 'İş & Eğitim',   desc: 'Çalışma, toplantı, kurs...',  color: '#6366f1' },
   { id: 'eğlence',    emoji: '🎬', label: 'Eğlence',        desc: 'Sinema, dizi, konser...',      color: '#ec4899' },
   { id: 'alışveriş',  emoji: '🛒', label: 'Alışveriş',      desc: 'Market, giyim, teknoloji...', color: '#f97316' },
   { id: 'yeme-içme',  emoji: '🍽️', label: 'Yeme & İçme',   desc: 'Restoran, kafe, ev yemeği...', color: '#ef4444' },
   { id: 'seyahat',    emoji: '✈️', label: 'Seyahat',        desc: 'Gezi, tatil, şehir dışı...',  color: '#0ea5e9' },
   { id: 'ev-yaşam',   emoji: '🏠', label: 'Ev & Yaşam',    desc: 'Tadilat, temizlik, bakım...', color: '#84cc16' },
-  { id: 'harcama',    emoji: '💰', label: 'Harcama',        desc: 'Para harcanan her şey...',    color: '#f59e0b' },
-  { id: 'diğer',      emoji: '📦', label: 'Diğer',          desc: 'Kategoriye uymayan...',       color: '#94a3b8' },
+  { id: 'diğer',      emoji: '📦', label: 'Diğer',          desc: 'Kategoriye uymayan...',        color: '#94a3b8' },
 ] as const;
 
 type CategoryId = typeof CATEGORIES[number]['id'];
@@ -35,7 +35,6 @@ const TITLE_PLACEHOLDERS: Record<CategoryId, string> = {
   'yeme-içme':  'Ör: Öğle yemeği',
   'seyahat':    'Ör: İstanbul\'a gittim',
   'ev-yaşam':   'Ör: Ev temizliği',
-  'harcama':    'Ör: Fatura ödedim',
   'diğer':      'Ne yaptın?',
 };
 
@@ -47,53 +46,22 @@ const ALL_CATEGORY_IDS = CATEGORIES.map(c => c.id) as string[];
 const LEGACY_IDS = ['gittim', 'yaptim', 'uyudum', 'izledim', 'spor', 'sağlık', 'iş'];
 const VALID_IDS = [...ALL_CATEGORY_IDS, ...LEGACY_IDS];
 
+// ── Duration helpers ─────────────────────────────────────────────────────────
+function minsToTime(mins: number): string {
+  if (!mins) return '00:30';
+  const h = Math.floor(mins / 60).toString().padStart(2, '0');
+  const m = (mins % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function timeToMins(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return (h * 60) + (m || 0);
+}
+
 // ── Styles ───────────────────────────────────────────────────────────────────
 const inputCls = "w-full bg-muted rounded-xl px-4 py-3 text-sm outline-none border border-border focus:border-foreground/30 transition-colors";
 const labelCls = "text-[11px] font-semibold text-foreground/50 mb-1.5 block uppercase tracking-wider";
-
-// ── PeopleInput sub-component ─────────────────────────────────────────────────
-function PeopleInput({ people, onChange }: { people: string[]; onChange: (v: string[]) => void }) {
-  const [input, setInput] = useState('');
-  const add = () => {
-    const p = input.trim();
-    if (p && !people.includes(p)) onChange([...people, p]);
-    setInput('');
-  };
-  return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          placeholder="Kişi adı ekle..."
-          className={cn(inputCls, 'flex-1')}
-        />
-        <button
-          type="button"
-          onClick={add}
-          className="px-4 py-3 bg-foreground/10 rounded-xl text-sm font-medium flex items-center gap-1.5 active:scale-95 transition-transform"
-        >
-          <Plus className="w-4 h-4" />
-          Ekle
-        </button>
-      </div>
-      {people.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {people.map((p, i) => (
-            <span key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-primary/10 text-primary font-medium">
-              {p}
-              <button type="button" onClick={() => onChange(people.filter((_, j) => j !== i))}>
-                <XIcon className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AddActionPage() {
@@ -171,7 +139,7 @@ export default function AddActionPage() {
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!title.trim()) { toast.error('Başlık boş olamaz'); return; }
-    if ((selCat === 'harcama' || selCat === 'alışveriş') && !amount) {
+    if (selCat === 'alışveriş' && !amount) {
       toast.error('Tutar zorunludur'); return;
     }
     setSaving(true);
@@ -209,15 +177,15 @@ export default function AddActionPage() {
         if (error) { console.error(error); toast.error('Kaydedilemedi'); return; }
       }
 
-      // Also save to transactions for spending categories
-      if (!isEditing && (selCat === 'harcama' || selCat === 'alışveriş') && amount) {
+      // Also save to transactions for alışveriş and yeme-içme when amount is set
+      if (!isEditing && ['alışveriş', 'yeme-içme'].includes(selCat) && amount) {
         await supabase.from('transactions').insert({
           user_id:          TEST_USER_ID,
           type:             'expense',
           title:            title.trim(),
           amount:           parseFloat(amount),
           currency:         currencyCode ?? 'TRY',
-          category:         expenseSubcat || selCat,
+          category:         selCat === 'alışveriş' ? 'Alışveriş' : 'Yiyecek & İçecek',
           transaction_date: new Date(`${date}T12:00:00`).toISOString(),
           created_via:      'manual',
         });
@@ -377,14 +345,21 @@ export default function AddActionPage() {
         {selCat === 'sağlık-spor' && (
           <>
             <div>
-              <label className={labelCls}>Süre (dakika)</label>
-              <input type="number" value={duration} onChange={e => setDuration(e.target.value)}
-                placeholder="Ör: 45" min="0" className={inputCls} />
+              <label className={labelCls}>Süre (ss:dd)</label>
+              <input type="time" value={minsToTime(parseInt(duration) || 0)}
+                onChange={e => setDuration(String(timeToMins(e.target.value)))}
+                className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Kalori (opsiyonel)</label>
               <input type="number" value={calories} onChange={e => setCalories(e.target.value)}
                 placeholder="Ör: 320 kcal" min="0" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notlar, detaylar..." rows={2}
+                className={cn(inputCls, 'resize-none')} />
             </div>
           </>
         )}
@@ -394,12 +369,22 @@ export default function AddActionPage() {
           <>
             <div>
               <label className={labelCls}>Kişiler</label>
-              <PeopleInput people={people} onChange={setPeople} />
+              <FriendAutocomplete
+                value={people}
+                onChange={setPeople}
+                placeholder="Kişi ara veya ekle..."
+              />
             </div>
             <div>
               <label className={labelCls}>Konum</label>
               <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
                 placeholder="Ör: Taksim Meydanı" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notlar, detaylar..." rows={2}
+                className={cn(inputCls, 'resize-none')} />
             </div>
           </>
         )}
@@ -408,14 +393,21 @@ export default function AddActionPage() {
         {selCat === 'iş-eğitim' && (
           <>
             <div>
-              <label className={labelCls}>Süre (dakika)</label>
-              <input type="number" value={duration} onChange={e => setDuration(e.target.value)}
-                placeholder="Ör: 90" min="0" className={inputCls} />
+              <label className={labelCls}>Süre (ss:dd)</label>
+              <input type="time" value={minsToTime(parseInt(duration) || 0)}
+                onChange={e => setDuration(String(timeToMins(e.target.value)))}
+                className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Proje / Konu</label>
               <input type="text" value={project} onChange={e => setProject(e.target.value)}
                 placeholder="Ör: Mobil uygulama projesi" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notlar, detaylar..." rows={2}
+                className={cn(inputCls, 'resize-none')} />
             </div>
           </>
         )}
@@ -430,7 +422,11 @@ export default function AddActionPage() {
             </div>
             <div>
               <label className={labelCls}>Kişiler</label>
-              <PeopleInput people={people} onChange={setPeople} />
+              <FriendAutocomplete
+                value={people}
+                onChange={setPeople}
+                placeholder="Kişi ara veya ekle..."
+              />
             </div>
             <div>
               <label className={labelCls}>Tutar (opsiyonel)</label>
@@ -459,6 +455,12 @@ export default function AddActionPage() {
               <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
                 placeholder="Ör: Migros, İstiklal Cad." className={inputCls} />
             </div>
+            <div>
+              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notlar, detaylar..." rows={2}
+                className={cn(inputCls, 'resize-none')} />
+            </div>
           </>
         )}
 
@@ -480,7 +482,17 @@ export default function AddActionPage() {
             </div>
             <div>
               <label className={labelCls}>Kişiler</label>
-              <PeopleInput people={people} onChange={setPeople} />
+              <FriendAutocomplete
+                value={people}
+                onChange={setPeople}
+                placeholder="Kişi ara veya ekle..."
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notlar, detaylar..." rows={2}
+                className={cn(inputCls, 'resize-none')} />
             </div>
           </>
         )}
@@ -506,6 +518,12 @@ export default function AddActionPage() {
                   placeholder="0" min="0" step="0.01" className={cn(inputCls, 'pl-8')} />
               </div>
             </div>
+            <div>
+              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notlar, detaylar..." rows={2}
+                className={cn(inputCls, 'resize-none')} />
+            </div>
           </>
         )}
 
@@ -513,9 +531,10 @@ export default function AddActionPage() {
         {selCat === 'ev-yaşam' && (
           <>
             <div>
-              <label className={labelCls}>Süre (dakika, opsiyonel)</label>
-              <input type="number" value={duration} onChange={e => setDuration(e.target.value)}
-                placeholder="Ör: 60" min="0" className={inputCls} />
+              <label className={labelCls}>Süre (ss:dd, opsiyonel)</label>
+              <input type="time" value={minsToTime(parseInt(duration) || 0)}
+                onChange={e => setDuration(String(timeToMins(e.target.value)))}
+                className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Açıklama</label>
@@ -569,9 +588,10 @@ export default function AddActionPage() {
         {selCat === 'diğer' && (
           <>
             <div>
-              <label className={labelCls}>Süre (dakika, opsiyonel)</label>
-              <input type="number" value={duration} onChange={e => setDuration(e.target.value)}
-                placeholder="Ör: 30" min="0" className={inputCls} />
+              <label className={labelCls}>Süre (ss:dd, opsiyonel)</label>
+              <input type="time" value={minsToTime(parseInt(duration) || 0)}
+                onChange={e => setDuration(String(timeToMins(e.target.value)))}
+                className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Açıklama</label>

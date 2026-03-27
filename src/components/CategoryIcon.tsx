@@ -1,6 +1,6 @@
 import {
   Activity, Users, Briefcase, Film, ShoppingCart,
-  UtensilsCrossed, Plane, Home, Wallet, MoreHorizontal,
+  UtensilsCrossed, Plane, Home, MoreHorizontal,
   MapPin, CheckCircle, Moon, Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,7 +15,6 @@ const CATEGORY_CONFIG: Record<string, { icon: React.ElementType; color: string; 
   'yeme-içme':  { icon: UtensilsCrossed, color: '#ef4444', label: 'Yeme & İçme'    },
   'seyahat':    { icon: Plane,           color: '#0ea5e9', label: 'Seyahat'        },
   'ev-yaşam':   { icon: Home,            color: '#84cc16', label: 'Ev & Yaşam'     },
-  'harcama':    { icon: Wallet,          color: '#f59e0b', label: 'Harcama'        },
   'diğer':      { icon: MoreHorizontal,  color: '#94a3b8', label: 'Diğer'          },
   // Legacy categories (backward compat)
   'gittim':     { icon: MapPin,          color: '#1E88E5', label: 'Gittim'         },

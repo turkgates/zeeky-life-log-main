@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, BellOff, CheckCheck, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useNotificationStore } from '@/store/useNotificationStore';
@@ -18,33 +18,69 @@ interface Notification {
   navigate_to?: string;
 }
 
-const MONTH_NAMES = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+function formatTime(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (mins < 1) return 'Az önce';
+  if (mins < 60) return `${mins} dk önce`;
+  if (hours < 24) return `${hours} saat önce`;
+  if (days === 1) return 'Dün';
+  return date.toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+  });
 }
 
-function formatGroupLabel(iso: string): string {
+function startOfWeekMonday(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function getGroupLabel(iso: string): string {
   const d = new Date(iso);
+  const dOnly = new Date(d);
+  dOnly.setHours(0, 0, 0, 0);
   const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  const toYMD = (dt: Date) => dt.toISOString().split('T')[0];
-  if (toYMD(d) === toYMD(today))     return 'Bugün';
-  if (toYMD(d) === toYMD(yesterday)) return 'Dün';
-  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - dOnly.getTime()) / 86400000);
+  if (diffDays === 0) return 'Bugün';
+  if (diffDays === 1) return 'Dün';
+  const weekStart = startOfWeekMonday(today);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  if (dOnly >= weekStart && dOnly < weekEnd) return 'Bu Hafta';
+  return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function groupByDate(items: Notification[]): { label: string; items: Notification[] }[] {
+const GROUP_ORDER = ['Bugün', 'Dün', 'Bu Hafta'];
+
+function groupNotifications(items: Notification[]): { label: string; items: Notification[] }[] {
   const map = new Map<string, Notification[]>();
   for (const n of items) {
-    const label = formatGroupLabel(n.created_at);
+    const label = getGroupLabel(n.created_at);
     if (!map.has(label)) map.set(label, []);
     map.get(label)!.push(n);
   }
-  return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
+  const entries = Array.from(map.entries()).map(([label, groupItems]) => ({ label, items: groupItems }));
+  return entries.sort((a, b) => {
+    const ia = GROUP_ORDER.indexOf(a.label);
+    const ib = GROUP_ORDER.indexOf(b.label);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    const ta = a.items[0]?.created_at ?? '';
+    const tb = b.items[0]?.created_at ?? '';
+    return tb.localeCompare(ta);
+  });
 }
 
 export default function NotificationsPage() {
@@ -105,10 +141,12 @@ export default function NotificationsPage() {
     void init();
   }, [generateNotifications, loadNotifications]);
 
-  const markAsRead = async (n: Notification) => {
+  const markAsRead = async (id: string) => {
+    const n = notifications.find(x => x.id === id);
+    if (!n) return;
     if (!n.is_read) {
-      await supabase.from('notifications').update({ is_read: true }).eq('id', n.id);
-      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x));
+      await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+      setNotifications(prev => prev.map(x => x.id === id ? { ...x, is_read: true } : x));
       setUnreadCount(prev => Math.max(0, prev - 1));
     }
     if (n.navigate_to) navigate(n.navigate_to);
@@ -143,104 +181,102 @@ export default function NotificationsPage() {
     clearTimeout(longPressTimer.current);
   };
 
-  const groups = groupByDate(notifications);
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
 
   return (
-    <div className="min-h-screen bg-background max-w-[430px] mx-auto flex flex-col">
+    <div className="min-h-screen bg-gray-50 max-w-[430px] mx-auto flex flex-col">
 
       {/* Header */}
-      <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-white/10">
+      <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="w-10 h-10 flex items-center justify-center rounded-full active:bg-white/10"
+        >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="flex-1 text-base font-semibold">Bildirimler</h1>
-        {unreadCount > 0 && (
+        {notifications.some(n => !n.is_read) && (
           <button
-            onClick={markAllRead}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 text-xs font-medium active:bg-white/25"
+            type="button"
+            onClick={() => void markAllRead()}
+            className="text-xs font-medium text-white/90 active:opacity-80"
           >
-            <CheckCheck className="w-3.5 h-3.5" />
-            Tümünü oku
+            Tümünü Okundu İşaretle
           </button>
         )}
       </div>
 
-      {/* Content */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
           <Loader2 className="w-8 h-8 animate-spin" />
           <p className="text-sm">Yükleniyor...</p>
         </div>
       ) : notifications.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground px-8">
-          <BellOff className="w-16 h-16 opacity-30" />
-          <p className="text-sm font-medium">Henüz bildirim yok</p>
+        <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-6">
+          <span className="text-5xl mb-4">🔔</span>
+          <p className="font-medium">Henüz bildirim yok</p>
+          <p className="text-sm mt-1 text-center">Yeni bildirimler burada görünecek</p>
         </div>
       ) : (
-        <div className="flex-1 pb-6">
+        <div className="flex-1 px-4 py-3 pb-8">
           {groups.map(group => (
-            <div key={group.label}>
-              <p className="px-4 pt-4 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+            <div key={group.label} className="mb-4">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2 px-0.5">
                 {group.label}
               </p>
-              <div className="px-4 space-y-2">
+              <div className="space-y-2">
                 {group.items.map(n => (
                   <div key={n.id} className="relative">
-                    <button
-                      onClick={() => void markAsRead(n)}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void markAsRead(n.id)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') void markAsRead(n.id); }}
                       onMouseDown={() => handleLongPressStart(n.id)}
                       onMouseUp={handleLongPressEnd}
+                      onMouseLeave={handleLongPressEnd}
                       onTouchStart={() => handleLongPressStart(n.id)}
                       onTouchEnd={handleLongPressEnd}
                       className={cn(
-                        "w-full flex items-start gap-3 p-3.5 rounded-xl border text-left active:scale-[0.98] transition-all",
-                        n.is_read
-                          ? "bg-card border-border"
-                          : "bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900"
+                        'flex items-start gap-3 p-4 rounded-2xl mb-2 cursor-pointer border border-gray-100 shadow-sm',
+                        n.is_read ? 'bg-white' : 'bg-blue-50',
                       )}
                     >
-                      {/* Unread dot */}
-                      {!n.is_read && (
-                        <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      )}
-
-                      {/* Icon */}
                       <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-lg"
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0"
                         style={{ backgroundColor: (n.color ?? '#6366f1') + '20' }}
                       >
                         {n.icon ?? '🔔'}
                       </div>
-
-                      {/* Text */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className={cn("text-sm truncate", !n.is_read ? "font-semibold text-foreground" : "font-medium text-foreground/80")}>
-                            {n.title}
-                          </p>
-                          <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                            {formatTime(n.created_at)}
-                          </span>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-sm text-gray-800">{n.title}</p>
+                          {!n.is_read && (
+                            <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.content}</p>
+                        <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{n.content}</p>
+                        <p className="text-xs text-gray-400 mt-1">{formatTime(n.created_at)}</p>
                       </div>
-                    </button>
+                    </div>
 
-                    {/* Long-press delete action */}
                     {longPressId === n.id && (
-                      <div className="absolute inset-0 z-10 rounded-xl bg-black/40 flex items-center justify-center gap-3"
+                      <div
+                        className="absolute inset-0 z-10 rounded-2xl bg-black/40 flex items-center justify-center gap-3"
                         onClick={() => setLongPressId(null)}
                       >
                         <button
+                          type="button"
                           onClick={e => { e.stopPropagation(); void deleteNotification(n.id); }}
                           className="flex items-center gap-1.5 px-4 py-2 bg-destructive text-white rounded-xl text-sm font-semibold"
                         >
                           <Trash2 className="w-4 h-4" /> Sil
                         </button>
                         <button
+                          type="button"
                           onClick={e => { e.stopPropagation(); setLongPressId(null); }}
-                          className="px-4 py-2 bg-card text-foreground rounded-xl text-sm font-semibold"
+                          className="px-4 py-2 bg-white text-gray-800 rounded-xl text-sm font-semibold"
                         >
                           İptal
                         </button>

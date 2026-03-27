@@ -250,7 +250,7 @@ export default function FinancePage() {
     return list;
   }, [transactions, filters]);
 
-  // Group by date
+  // Group by date — newest day first; within each day, newest transaction first
   const grouped = useMemo(() => {
     const g: Record<string, Transaction[]> = {};
     filteredTx.forEach(t => {
@@ -258,8 +258,23 @@ export default function FinancePage() {
       if (!g[label]) g[label] = [];
       g[label].push(t);
     });
-    return g;
-  }, [filteredTx]);
+    const rows = Object.entries(g)
+      .sort((a, b) => {
+        const dA = a[1][0]?.date ?? '';
+        const dB = b[1][0]?.date ?? '';
+        return dB.localeCompare(dA);
+      })
+      .map(([label, txs]) => {
+        if (filters.sort === 'newest') {
+          return [label, [...txs].sort((x, y) => y.transaction_date.localeCompare(x.transaction_date))] as [string, Transaction[]];
+        }
+        if (filters.sort === 'oldest') {
+          return [label, [...txs].sort((x, y) => x.transaction_date.localeCompare(y.transaction_date))] as [string, Transaction[]];
+        }
+        return [label, txs] as [string, Transaction[]];
+      });
+    return rows;
+  }, [filteredTx, filters.sort]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const getCatInfo = (tx: Transaction) => categories.find(c => c.name === tx.category);
@@ -447,7 +462,7 @@ export default function FinancePage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {Object.entries(grouped).map(([label, txs]) => (
+            {grouped.map(([label, txs]) => (
               <div key={label}>
                 <p className="text-xs font-semibold text-muted-foreground mb-2">{label}</p>
                 <div className="space-y-2">

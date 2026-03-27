@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, ChevronDown, ChevronUp, Plus, Pencil, Save, Loader2 } from 'lucide-react';
+import { Users, Settings, ChevronDown, ChevronUp, Plus, Pencil, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { CURRENCIES, getCurrencySymbol } from '@/lib/currency';
+import { getCurrencySymbol } from '@/lib/currency';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 
 const USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
@@ -229,24 +229,6 @@ export default function ProfilePage() {
   const [currency, setCurrency] = useState('TRY');
   const [currencySymbolState, setCurrencySymbolState] = useState('₺');
 
-  const currencyOptions = [
-    { code: 'TRY', symbol: '₺' },
-    { code: 'EUR', symbol: '€' },
-    { code: 'USD', symbol: '$' },
-    { code: 'GBP', symbol: '£' },
-    { code: 'CHF', symbol: 'Fr' },
-  ];
-
-  const handleCurrencyChange = (selectedCode: string) => {
-    const selected = currencyOptions.find(c => c.code === selectedCode);
-    if (selected) {
-      setCurrency(selected.code);
-      setCurrencySymbolState(selected.symbol);
-      setGlobalCurrency(selected.code, selected.symbol);
-      console.log('Currency changed:', selected.code, selected.symbol);
-    }
-  };
-
   // Health
   const [weight, setWeight] = useState<number | ''>('');
   const [height, setHeight] = useState<number | ''>('');
@@ -297,7 +279,6 @@ export default function ProfilePage() {
   const [shortTermGoal, setShortTermGoal] = useState('');
   const [longTermGoal, setLongTermGoal] = useState('');
   const [motivationPref, setMotivationPref] = useState('');
-  const [aiPersonality, setAiPersonality] = useState<'balanced' | 'strict' | 'gentle'>('balanced');
 
   // ─── BMI ────────────────────────────────────────────────────────────────────
   const bmi = useMemo(() => {
@@ -387,9 +368,6 @@ export default function ProfilePage() {
         if (p.short_term_goal) setShortTermGoal(p.short_term_goal);
         if (p.long_term_goal) setLongTermGoal(p.long_term_goal);
         if (p.motivation_type) setMotivationPref(p.motivation_type);
-        if (p.ai_personality === 'strict' || p.ai_personality === 'gentle' || p.ai_personality === 'balanced') {
-          setAiPersonality(p.ai_personality);
-        }
       }
     } catch (err) {
       console.error('loadProfile', err);
@@ -428,18 +406,25 @@ export default function ProfilePage() {
         doesSport, sleepGoal,
       });
 
+      const { data: existingProfile } = await supabase
+        .from('user_profiles')
+        .select('ai_personality')
+        .eq('user_id', USER_ID)
+        .maybeSingle();
+      const aiPersonalityPersist =
+        existingProfile?.ai_personality === 'strict' ||
+        existingProfile?.ai_personality === 'gentle' ||
+        existingProfile?.ai_personality === 'balanced'
+          ? existingProfile.ai_personality
+          : 'balanced';
+
       const [usersRes, profilesRes] = await Promise.all([
-        (() => {
-          console.log('Saving currency:', currency, currencySymbolState);
-          return supabase.from('users').update({
-            full_name: fullName || null,
-            birth_date: birthDate || null,
-            gender: gender || null,
-            currency: currency || 'TRY',
-            currency_symbol: currencySymbolState || '₺',
-            profile_score: score,
-          }).eq('id', USER_ID);
-        })(),
+        supabase.from('users').update({
+          full_name: fullName || null,
+          birth_date: birthDate || null,
+          gender: gender || null,
+          profile_score: score,
+        }).eq('id', USER_ID),
 
         supabase.from('user_profiles').upsert({
           user_id: USER_ID,
@@ -478,7 +463,7 @@ export default function ProfilePage() {
           short_term_goal: shortTermGoal || null,
           long_term_goal: longTermGoal || null,
           motivation_type: motivationPref || null,
-          ai_personality: aiPersonality,
+          ai_personality: aiPersonalityPersist,
         }, { onConflict: 'user_id' }),
       ]);
 
@@ -503,7 +488,6 @@ export default function ProfilePage() {
     dailyWorkHours, commuteDistance, salaryRange, education,
     interests, musicGenres, filmGenres, monthlyBudget, savingsGoal,
     financialGoal, shortTermGoal, longTermGoal, motivationPref,
-    currency, currencySymbolState, aiPersonality,
   ]);
 
   // ─── Initials for avatar ─────────────────────────────────────────────────────
@@ -527,9 +511,14 @@ export default function ProfilePage() {
     <div className="pb-32 max-w-[430px] mx-auto animate-fade-in">
       <div className="flex items-center justify-between p-4">
         <h1 className="text-lg font-semibold">Bilgilerim</h1>
-        <button onClick={() => navigate('/settings')} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-muted">
-          <Settings className="w-5 h-5 text-muted-foreground" />
-        </button>
+        <div className="flex gap-3">
+          <button type="button" onClick={() => navigate('/friends')} className="p-2 rounded-full active:bg-muted" aria-label="Arkadaşlar">
+            <Users size={22} className="text-gray-600" />
+          </button>
+          <button type="button" onClick={() => navigate('/settings')} className="p-2 rounded-full active:bg-muted" aria-label="Ayarlar">
+            <Settings size={22} className="text-gray-600" />
+          </button>
+        </div>
       </div>
 
       {/* Avatar */}
@@ -565,48 +554,6 @@ export default function ProfilePage() {
           <FieldText label="Ad Soyad" value={fullName} onChange={setFullName} placeholder="Adın ve soyadın" />
           <FieldDate label="Doğum Tarihi" value={birthDate} onChange={setBirthDate} />
           <SegmentedSelector label="Cinsiyet" options={['Erkek', 'Kadın', 'Diğer']} value={gender} onChange={setGender} />
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Para Birimi</label>
-            <select
-              value={currency}
-              onChange={e => handleCurrencyChange(e.target.value)}
-              className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors appearance-none"
-            >
-              {CURRENCIES.map(c => (
-                <option key={c.code} value={c.code}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-          {/* AI Personality */}
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-0.5">Zeeky'nin Kişiliği</p>
-            <p className="text-[11px] text-muted-foreground mb-2">Zeeky sana nasıl davransın?</p>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  { value: 'balanced', emoji: '😊', label: 'Dengeli', desc: 'Motive edici ve dengeli' },
-                  { value: 'strict',   emoji: '💪', label: 'Sert',    desc: 'Direkt ve sonuç odaklı' },
-                  { value: 'gentle',   emoji: '🤗', label: 'Nazik',   desc: 'Anlayışlı ve destekleyici' },
-                ] as const
-              ).map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setAiPersonality(opt.value)}
-                  className={cn(
-                    "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-colors",
-                    aiPersonality === opt.value
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border bg-muted text-muted-foreground"
-                  )}
-                >
-                  <span className="text-xl">{opt.emoji}</span>
-                  <span className="text-xs font-semibold leading-tight">{opt.label}</span>
-                  <span className="text-[10px] leading-snug">{opt.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </ExpandableSection>
 
         {/* Health */}
