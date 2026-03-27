@@ -1,14 +1,14 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Settings, ChevronDown, ChevronUp, Plus, Pencil, Save, Loader2 } from 'lucide-react';
+import { signOut } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { getCurrencySymbol } from '@/lib/currency';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
-
-const USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
+import { useAuthStore } from '@/store/useAuthStore';
 
 // ─── Reusable field components ────────────────────────────────────────────────
 
@@ -217,13 +217,15 @@ function calcScore(p: {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? '';
+  const userEmail = user?.email || '';
   const [pageLoading, setPageLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const setGlobalCurrency = useCurrencyStore(s => s.setCurrency);
 
   // users table
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState('');
   const [currency, setCurrency] = useState('TRY');
@@ -300,11 +302,15 @@ export default function ProfilePage() {
 
   // ─── Fetch on mount ─────────────────────────────────────────────────────────
   const loadProfile = useCallback(async () => {
+    if (!userId) {
+      setPageLoading(false);
+      return;
+    }
     setPageLoading(true);
     try {
       const [usersRes, profilesRes] = await Promise.all([
-        supabase.from('users').select('full_name, email, birth_date, gender, currency, currency_symbol, profile_score').eq('id', USER_ID).single(),
-        supabase.from('user_profiles').select('*').eq('user_id', USER_ID).single(),
+        supabase.from('users').select('full_name, birth_date, gender, currency, currency_symbol, profile_score').eq('id', userId).single(),
+        supabase.from('user_profiles').select('*').eq('user_id', userId).single(),
       ]);
 
       console.log('Loaded user data:', usersRes.data);
@@ -313,7 +319,6 @@ export default function ProfilePage() {
       if (usersRes.data) {
         const u = usersRes.data;
         if (u.full_name) setFullName(u.full_name);
-        if (u.email) setEmail(u.email);
         if (u.birth_date) setBirthDate(u.birth_date);
         if (u.gender) setGender(u.gender);
         const loadedCurrency = u.currency || 'TRY';
@@ -374,7 +379,7 @@ export default function ProfilePage() {
     } finally {
       setPageLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => { void loadProfile(); }, [loadProfile]);
 
@@ -409,7 +414,7 @@ export default function ProfilePage() {
       const { data: existingProfile } = await supabase
         .from('user_profiles')
         .select('ai_personality')
-        .eq('user_id', USER_ID)
+        .eq('user_id', userId)
         .maybeSingle();
       const aiPersonalityPersist =
         existingProfile?.ai_personality === 'strict' ||
@@ -424,10 +429,10 @@ export default function ProfilePage() {
           birth_date: birthDate || null,
           gender: gender || null,
           profile_score: score,
-        }).eq('id', USER_ID),
+        }).eq('id', userId),
 
         supabase.from('user_profiles').upsert({
-          user_id: USER_ID,
+          user_id: userId,
           weight: weight === '' ? null : weight,
           height: height === '' ? null : height,
           blood_type: bloodType || null,
@@ -530,7 +535,7 @@ export default function ProfilePage() {
           </button>
         </div>
         <h2 className="font-semibold">{fullName || 'Kullanıcı'}</h2>
-        {email && <p className="text-xs text-muted-foreground">{email}</p>}
+        {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
       </div>
 
       {/* Completion Bar */}
@@ -657,6 +662,17 @@ export default function ProfilePage() {
             </button>
           </div>
         </ExpandableSection>
+
+        <button
+          type="button"
+          onClick={async () => {
+            await signOut();
+            navigate('/auth');
+          }}
+          className="w-full py-3 mt-6 text-red-500 border border-red-200 rounded-2xl font-medium"
+        >
+          Çıkış Yap
+        </button>
       </div>
 
       {/* Save Button */}

@@ -4,12 +4,13 @@ import { searchFriends, addFriend } from '@/lib/friendsSupabase';
 type SuggestionRow = { id: string; name: string; nickname?: string | null; relationship?: string | null };
 
 interface Props {
+  userId: string;
   value: string[];
   onChange: (people: string[]) => void;
   placeholder?: string;
 }
 
-export function FriendAutocomplete({ value, onChange, placeholder }: Props) {
+export function FriendAutocomplete({ userId, value, onChange, placeholder }: Props) {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState<SuggestionRow[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -21,12 +22,13 @@ export function FriendAutocomplete({ value, onChange, placeholder }: Props) {
       return;
     }
     const timer = setTimeout(async () => {
-      const results = await searchFriends(input);
+      if (!userId) return;
+      const results = await searchFriends(userId, input);
       setSuggestions(results as SuggestionRow[]);
       setShowDropdown(true);
     }, 300);
     return () => clearTimeout(timer);
-  }, [input]);
+  }, [input, userId]);
 
   const addPerson = async (name: string) => {
     if (!name.trim() || value.includes(name)) return;
@@ -34,8 +36,8 @@ export function FriendAutocomplete({ value, onChange, placeholder }: Props) {
     const exists = suggestions.find(
       s => s.name.toLowerCase() === name.toLowerCase(),
     );
-    if (!exists) {
-      await addFriend({ name: name.trim(), source: 'manual' });
+    if (!exists && userId) {
+      await addFriend(userId, { name: name.trim(), source: 'manual' });
     }
 
     onChange([...value, name.trim()]);

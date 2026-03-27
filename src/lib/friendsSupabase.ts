@@ -1,7 +1,5 @@
 import { supabase } from '@/lib/supabase';
 
-const USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
-
 export type FriendRelationship =
   | 'arkadaş'
   | 'aile'
@@ -26,30 +24,33 @@ export interface Friend {
   created_at: string;
 }
 
-export const fetchFriends = async () => {
+export const fetchFriends = async (userId: string) => {
+  if (!userId) return { data: [], error: null };
   const { data, error } = await supabase
     .from('friends')
     .select('*')
-    .eq('user_id', USER_ID)
+    .eq('user_id', userId)
     .order('interaction_count', { ascending: false });
   return { data, error };
 };
 
-export const searchFriends = async (query: string) => {
+export const searchFriends = async (userId: string, query: string) => {
+  if (!userId) return [];
   const { data } = await supabase
     .from('friends')
     .select('id, name, nickname, relationship')
-    .eq('user_id', USER_ID)
+    .eq('user_id', userId)
     .ilike('name', `%${query}%`)
     .limit(5);
   return data || [];
 };
 
-export const addFriend = async (friend: Partial<Friend>) => {
+export const addFriend = async (userId: string, friend: Partial<Friend>) => {
+  if (!userId) return { data: null, error: { message: 'Oturum yok' } };
   const { data, error } = await supabase
     .from('friends')
     .insert({
-      user_id: USER_ID,
+      user_id: userId,
       name: friend.name,
       phone: friend.phone || null,
       email: friend.email || null,
@@ -65,34 +66,37 @@ export const addFriend = async (friend: Partial<Friend>) => {
   return { data, error };
 };
 
-export const updateFriend = async (id: string, updates: Partial<Friend>) => {
+export const updateFriend = async (userId: string, id: string, updates: Partial<Friend>) => {
+  if (!userId) return { data: null, error: { message: 'Oturum yok' } };
   const { data, error } = await supabase
     .from('friends')
     .update(updates)
     .eq('id', id)
-    .eq('user_id', USER_ID)
+    .eq('user_id', userId)
     .select()
     .single();
   return { data, error };
 };
 
-export const deleteFriend = async (id: string) => {
+export const deleteFriend = async (userId: string, id: string) => {
+  if (!userId) return { error: { message: 'Oturum yok' } };
   const { error } = await supabase
     .from('friends')
     .delete()
     .eq('id', id)
-    .eq('user_id', USER_ID);
+    .eq('user_id', userId);
   return { error };
 };
 
-export const findOrCreateFriend = async (name: string) => {
+export const findOrCreateFriend = async (userId: string, name: string) => {
+  if (!userId) return null;
   const trimmed = name.trim();
   if (!trimmed) return null;
 
   const { data: existing } = await supabase
     .from('friends')
     .select('*')
-    .eq('user_id', USER_ID)
+    .eq('user_id', userId)
     .ilike('name', trimmed)
     .maybeSingle();
 
@@ -111,7 +115,7 @@ export const findOrCreateFriend = async (name: string) => {
   const { data: newFriend } = await supabase
     .from('friends')
     .insert({
-      user_id: USER_ID,
+      user_id: userId,
       name: trimmed,
       relationship: 'arkadaş',
       source: 'chat',

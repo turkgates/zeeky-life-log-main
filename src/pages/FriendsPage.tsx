@@ -16,6 +16,7 @@ import {
   deleteFriend,
   type Friend,
 } from '@/lib/friendsSupabase';
+import { useAuthStore } from '@/store/useAuthStore';
 
 const FRIEND_RELATIONSHIPS = ['arkadaş', 'aile', 'akraba', 'iş arkadaşı', 'partner', 'diğer'] as const;
 
@@ -68,6 +69,8 @@ function formatLastInteraction(iso?: string | null): string {
 
 export default function FriendsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? '';
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -86,10 +89,11 @@ export default function FriendsPage() {
   });
 
   const load = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
     try {
-      const { data, error } = await fetchFriends();
-      if (error) {
+      const { data, error } = await fetchFriends(userId);
+      if (error && 'message' in error && error.message !== 'Oturum yok') {
         console.error(error);
         toast.error('Liste yüklenemedi');
         return;
@@ -98,7 +102,7 @@ export default function FriendsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     void load();
@@ -161,8 +165,12 @@ export default function FriendsPage() {
     }
     setSaving(true);
     try {
+      if (!userId) {
+        toast.error('Oturum yok');
+        return;
+      }
       if (form.id) {
-        const { error } = await updateFriend(form.id, {
+        const { error } = await updateFriend(userId, form.id, {
           name: form.name.trim(),
           nickname: form.nickname.trim() || undefined,
           relationship: form.relationship || 'arkadaş',
@@ -175,7 +183,7 @@ export default function FriendsPage() {
         }
         toast.success('Güncellendi');
       } else {
-        const { error } = await addFriend({
+        const { error } = await addFriend(userId, {
           name: form.name.trim(),
           nickname: form.nickname.trim() || undefined,
           relationship: form.relationship || 'arkadaş',
@@ -197,8 +205,9 @@ export default function FriendsPage() {
   };
 
   const remove = async (id: string) => {
+    if (!userId) return;
     if (!window.confirm('Bu kişiyi silmek istediğine emin misin?')) return;
-    const { error } = await deleteFriend(id);
+    const { error } = await deleteFriend(userId, id);
     if (error) {
       toast.error('Silinemedi');
       return;

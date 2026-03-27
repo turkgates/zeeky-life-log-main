@@ -1,8 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { Activity, ActionCategory } from '@/types/zeeky';
 
-export const TEST_USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
-
 const CATEGORIES: ActionCategory[] = [
   // New categories
   'sağlık-spor', 'sosyal', 'iş-eğitim', 'eğlence',
@@ -97,14 +95,15 @@ export function mapRowToActivity(row: Record<string, unknown>): Activity {
   };
 }
 
-export async function fetchTodayActivities(): Promise<Activity[]> {
+export async function fetchTodayActivities(userId: string): Promise<Activity[]> {
+  if (!userId) return [];
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0]; // "2026-03-23"
 
   const { data, error } = await supabase
     .from('activities')
     .select('*')
-    .eq('user_id', TEST_USER_ID)
+    .eq('user_id', userId)
     .gte('activity_date', `${todayStr}T00:00:00.000Z`)
     .lt('activity_date', `${todayStr}T23:59:59.999Z`)
     .order('activity_date', { ascending: false });
@@ -119,11 +118,12 @@ export async function fetchTodayActivities(): Promise<Activity[]> {
   return (data || []).map(mapRowToActivity);
 }
 
-export async function fetchAllActivitiesOrdered(): Promise<Activity[]> {
+export async function fetchAllActivitiesOrdered(userId: string): Promise<Activity[]> {
+  if (!userId) return [];
   const { data, error } = await supabase
     .from('activities')
     .select('*')
-    .eq('user_id', TEST_USER_ID)
+    .eq('user_id', userId)
     .order('activity_date', { ascending: false });
 
   if (error) {
@@ -133,12 +133,13 @@ export async function fetchAllActivitiesOrdered(): Promise<Activity[]> {
   return (data || []).map(mapRowToActivity);
 }
 
-export async function deleteActivityById(id: string): Promise<boolean> {
+export async function deleteActivityById(userId: string, id: string): Promise<boolean> {
+  if (!userId) return false;
   const { error } = await supabase
     .from('activities')
     .delete()
     .eq('id', id)
-    .eq('user_id', TEST_USER_ID);
+    .eq('user_id', userId);
 
   if (error) {
     console.error('deleteActivityById', error);
@@ -147,11 +148,12 @@ export async function deleteActivityById(id: string): Promise<boolean> {
   return true;
 }
 
-export async function fetchActivitiesByDate(dateStr: string): Promise<Activity[]> {
+export async function fetchActivitiesByDate(userId: string, dateStr: string): Promise<Activity[]> {
+  if (!userId) return [];
   const { data, error } = await supabase
     .from('activities')
     .select('*')
-    .eq('user_id', TEST_USER_ID)
+    .eq('user_id', userId)
     .gte('activity_date', `${dateStr}T00:00:00.000Z`)
     .lt('activity_date', `${dateStr}T23:59:59.999Z`)
     .order('activity_date', { ascending: false });
@@ -176,11 +178,12 @@ export interface FavoriteActivity {
   details?: Record<string, unknown>;
 }
 
-export async function fetchFavoriteActivities(): Promise<FavoriteActivity[]> {
+export async function fetchFavoriteActivities(userId: string): Promise<FavoriteActivity[]> {
+  if (!userId) return [];
   const { data, error } = await supabase
     .from('activities')
     .select('*')
-    .eq('user_id', TEST_USER_ID)
+    .eq('user_id', userId)
     .eq('is_favorite', true)
     .order('created_at', { ascending: false })
     .limit(10);
@@ -205,9 +208,10 @@ export async function fetchFavoriteActivities(): Promise<FavoriteActivity[]> {
   }));
 }
 
-export async function quickLogFavorite(fav: FavoriteActivity): Promise<boolean> {
+export async function quickLogFavorite(userId: string, fav: FavoriteActivity): Promise<boolean> {
+  if (!userId) return false;
   const { error } = await supabase.from('activities').insert({
-    user_id:      TEST_USER_ID,
+    user_id:      userId,
     title:        fav.title,
     category:     fav.category,
     amount:       fav.amount ?? null,
@@ -235,11 +239,12 @@ export interface Suggestion {
   status: 'pending' | 'accepted' | 'skipped';
 }
 
-export async function fetchPendingSuggestions(): Promise<Suggestion[]> {
+export async function fetchPendingSuggestions(userId: string): Promise<Suggestion[]> {
+  if (!userId) return [];
   const { data, error } = await supabase
     .from('suggestions')
     .select('*')
-    .eq('user_id', TEST_USER_ID)
+    .eq('user_id', userId)
     .eq('status', 'pending')
     .order('generated_at', { ascending: false })
     .limit(5);
@@ -257,21 +262,23 @@ export async function fetchPendingSuggestions(): Promise<Suggestion[]> {
   }));
 }
 
-export async function updateSuggestionStatus(id: string, status: 'accepted' | 'skipped'): Promise<void> {
+export async function updateSuggestionStatus(userId: string, id: string, status: 'accepted' | 'skipped'): Promise<void> {
+  if (!userId) return;
   const { error } = await supabase
     .from('suggestions')
     .update({ status })
     .eq('id', id)
-    .eq('user_id', TEST_USER_ID);
+    .eq('user_id', userId);
 
   if (error) console.error('updateSuggestionStatus', error);
 }
 
-export async function fetchDatesWithActivities(): Promise<Set<string>> {
+export async function fetchDatesWithActivities(userId: string): Promise<Set<string>> {
+  if (!userId) return new Set();
   const { data, error } = await supabase
     .from('activities')
     .select('created_at')
-    .eq('user_id', TEST_USER_ID);
+    .eq('user_id', userId);
 
   if (error || !data) return new Set();
   return new Set(

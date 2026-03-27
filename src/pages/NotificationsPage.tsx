@@ -4,8 +4,7 @@ import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useNotificationStore } from '@/store/useNotificationStore';
-
-const USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface Notification {
   id: string;
@@ -85,6 +84,8 @@ function groupNotifications(items: Notification[]): { label: string; items: Noti
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? '';
   const { setUnreadCount } = useNotificationStore();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -102,17 +103,22 @@ export default function NotificationsPage() {
   }, [setUnreadCount]);
 
   const loadNotifications = useCallback(async () => {
+    if (!userId) {
+      setNotifications([]);
+      return;
+    }
     const { data } = await supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', USER_ID)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50);
     if (data) setNotifications(data as Notification[]);
     await refreshUnreadCount();
-  }, [refreshUnreadCount]);
+  }, [refreshUnreadCount, userId]);
 
   const generateNotifications = useCallback(async () => {
+    if (!userId) return;
     try {
       await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-notifications`,
@@ -123,23 +129,29 @@ export default function NotificationsPage() {
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY as string,
           },
-          body: JSON.stringify({ user_id: USER_ID }),
+          body: JSON.stringify({ user_id: userId }),
         }
       );
     } catch (e) {
       console.error('generateNotifications error:', e);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
+      if (!userId) {
+        setNotifications([]);
+        setUnreadCount(0);
+        setIsLoading(false);
+        return;
+      }
       await generateNotifications();
       await loadNotifications();
       setIsLoading(false);
     };
     void init();
-  }, [generateNotifications, loadNotifications]);
+  }, [generateNotifications, loadNotifications, userId, setUnreadCount]);
 
   const markAsRead = async (id: string) => {
     const n = notifications.find(x => x.id === id);
@@ -153,10 +165,11 @@ export default function NotificationsPage() {
   };
 
   const markAllRead = async () => {
+    if (!userId) return;
     await supabase
       .from('notifications')
       .update({ is_read: true })
-      .eq('user_id', USER_ID)
+      .eq('user_id', userId)
       .eq('is_read', false);
     setNotifications(prev => prev.map(x => ({ ...x, is_read: true })));
     setUnreadCount(0);

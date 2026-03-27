@@ -1,7 +1,5 @@
 import { supabase } from './supabase';
 
-export const TX_USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
-
 export const MONTH_SHORT = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 export const DAY_SHORT   = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 
@@ -65,13 +63,14 @@ function mapRow(row: Record<string, unknown>): Transaction {
 
 // ── Fetch ────────────────────────────────────────────────────────────────────
 
-export async function fetchTransactions(year: number, month: number): Promise<Transaction[]> {
+export async function fetchTransactions(userId: string, year: number, month: number): Promise<Transaction[]> {
+  if (!userId) return [];
   const startOfMonth = new Date(year, month, 1).toISOString();
   const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
-    .eq('user_id', TX_USER_ID)
+    .eq('user_id', userId)
     .gte('transaction_date', startOfMonth)
     .lte('transaction_date', endOfMonth)
     .order('transaction_date', { ascending: false });
@@ -111,7 +110,8 @@ export function computeWeeklyChart(transactions: Transaction[]): ChartBar[] {
 }
 
 /** Last N months income/expense bars */
-export async function fetchMonthlyChart(months = 6): Promise<ChartBar[]> {
+export async function fetchMonthlyChart(userId: string, months = 6): Promise<ChartBar[]> {
+  if (!userId) return [];
   const now = new Date();
   const results: ChartBar[] = [];
   for (let i = months - 1; i >= 0; i--) {
@@ -122,7 +122,7 @@ export async function fetchMonthlyChart(months = 6): Promise<ChartBar[]> {
     const { data } = await supabase
       .from('transactions')
       .select('type, amount')
-      .eq('user_id', TX_USER_ID)
+      .eq('user_id', userId)
       .gte('transaction_date', start)
       .lte('transaction_date', end);
     const txs = data || [];
@@ -136,13 +136,14 @@ export async function fetchMonthlyChart(months = 6): Promise<ChartBar[]> {
 }
 
 /** Current year monthly bars */
-export async function fetchYearlyChart(year: number): Promise<ChartBar[]> {
+export async function fetchYearlyChart(userId: string, year: number): Promise<ChartBar[]> {
+  if (!userId) return [];
   const start = new Date(year, 0, 1).toISOString();
   const end   = new Date(year, 11, 31, 23, 59, 59).toISOString();
   const { data } = await supabase
     .from('transactions')
     .select('type, amount, transaction_date')
-    .eq('user_id', TX_USER_ID)
+    .eq('user_id', userId)
     .gte('transaction_date', start)
     .lte('transaction_date', end);
   const txs = data || [];
@@ -167,8 +168,9 @@ export interface AddTransactionPayload {
   description?: string;
 }
 
-export async function addTransaction(payload: AddTransactionPayload): Promise<boolean> {
-  const base = { ...payload, user_id: TX_USER_ID, created_via: 'manual' };
+export async function addTransaction(userId: string, payload: AddTransactionPayload): Promise<boolean> {
+  if (!userId) return false;
+  const base = { ...payload, user_id: userId, created_via: 'manual' };
   const { data, error } = await supabase
     .from('transactions')
     .insert(base)
@@ -193,28 +195,32 @@ export async function addTransaction(payload: AddTransactionPayload): Promise<bo
 }
 
 export async function updateTransaction(
+  userId: string,
   id: string,
   fields: Partial<Pick<Transaction, 'title' | 'amount' | 'category' | 'subcategory' | 'transaction_date' | 'frequency' | 'description' | 'type'>>,
 ): Promise<boolean> {
+  if (!userId) return false;
   const { error } = await supabase
     .from('transactions')
     .update(fields)
     .eq('id', id)
-    .eq('user_id', TX_USER_ID);
+    .eq('user_id', userId);
   if (error) { console.error('updateTransaction:', error); return false; }
   return true;
 }
 
 export async function deleteTransaction(
+  userId: string,
   id: string,
   opts: { deleteAll?: boolean; parentId?: string | null } = {},
 ): Promise<boolean> {
+  if (!userId) return false;
   if (opts.deleteAll && opts.parentId) {
-    await supabase.from('transactions').delete().eq('parent_transaction_id', opts.parentId).eq('user_id', TX_USER_ID);
-    await supabase.from('transactions').delete().eq('id', opts.parentId).eq('user_id', TX_USER_ID);
+    await supabase.from('transactions').delete().eq('parent_transaction_id', opts.parentId).eq('user_id', userId);
+    await supabase.from('transactions').delete().eq('id', opts.parentId).eq('user_id', userId);
     return true;
   }
-  const { error } = await supabase.from('transactions').delete().eq('id', id).eq('user_id', TX_USER_ID);
+  const { error } = await supabase.from('transactions').delete().eq('id', id).eq('user_id', userId);
   if (error) { console.error('deleteTransaction:', error); return false; }
   return true;
 }

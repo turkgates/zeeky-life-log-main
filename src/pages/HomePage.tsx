@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TEST_USER_ID } from '@/lib/activitySupabase';
 import { findOrCreateFriend } from '@/lib/friendsSupabase';
 import { supabase } from '@/lib/supabase';
 import { useChatStore } from '@/store/useChatStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
+import { useAuthStore } from '@/store/useAuthStore';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl    = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
@@ -19,6 +19,8 @@ function getGreeting() {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? '';
 
   const {
     messages, isLoaded, offset, hasMore,
@@ -47,37 +49,45 @@ export default function HomePage() {
 
   // ── Fetch unread count ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!userId) return;
     const run = async () => {
       const { count } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', '520ffdd8-fd9e-472f-a388-021bded37b7f')
+        .eq('user_id', userId)
         .eq('is_read', false);
       setUnreadCount(count || 0);
     };
     void run();
-  }, [setUnreadCount]);
+  }, [setUnreadCount, userId]);
 
-  // ── Load user name ────────────────────────────────────────────────────────
+  // ── Load user name (metadata first, then users table) ─────────────────────
   useEffect(() => {
+    const meta = user?.user_metadata as { full_name?: string } | undefined;
+    if (meta?.full_name?.trim()) {
+      setUserName(meta.full_name.trim().split(' ')[0]);
+      return;
+    }
+    if (!userId) return;
     supabase
       .from('users')
       .select('full_name')
-      .eq('id', TEST_USER_ID)
+      .eq('id', userId)
       .single()
       .then(({ data }) => {
         if (data?.full_name) setUserName((data.full_name as string).split(' ')[0]);
       });
-  }, []);
+  }, [user, userId]);
 
   // ── Load chat history ─────────────────────────────────────────────────────
   const loadHistory = useCallback(async (fetchOffset = 0, prepend = false) => {
+    if (!userId) return;
     const today = new Date().toISOString().split('T')[0];
 
     const { data, count } = await supabase
       .from('conversations')
       .select('role, content, created_at', { count: 'exact' })
-      .eq('user_id', TEST_USER_ID)
+      .eq('user_id', userId)
       .gte('created_at', `${today}T00:00:00.000Z`)
       .lte('created_at', `${today}T23:59:59.999Z`)
       .order('created_at', { ascending: false })
@@ -118,7 +128,7 @@ export default function HomePage() {
     setHasMore((count ?? 0) > fetchOffset + 10);
     setOffset(fetchOffset + 10);
     setLoaded(true);
-  }, [setMessages, prependMessages, setHasMore, setOffset, setLoaded]);
+  }, [setMessages, prependMessages, setHasMore, setOffset, setLoaded, userId]);
 
   // Load on mount
   useEffect(() => {
@@ -150,6 +160,7 @@ export default function HomePage() {
 
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (userMessage: string) => {
+    if (!userId) return;
     addMessage({
       id: Date.now().toString(),
       role: 'user',
@@ -163,7 +174,7 @@ export default function HomePage() {
       const { data: profileData } = await supabase
         .from('user_profiles')
         .select('ai_personality')
-        .eq('user_id', TEST_USER_ID)
+        .eq('user_id', userId)
         .single();
       const personality = profileData?.ai_personality || 'balanced';
 
@@ -174,7 +185,7 @@ export default function HomePage() {
           'Authorization': `Bearer ${supabaseAnonKey}`,
           'apikey': supabaseAnonKey,
         },
-        body: JSON.stringify({ message: userMessage, user_id: TEST_USER_ID, personality }),
+        body: JSON.stringify({ message: userMessage, user_id: userId, personality }),
       });
       const data = await response.json();
       console.log('Zeeky full response:', JSON.stringify(data));
@@ -195,7 +206,7 @@ export default function HomePage() {
         for (const activity of data.extracted_data.activities as Array<{ people?: string[] }>) {
           if (activity.people && activity.people.length > 0) {
             for (const personName of activity.people) {
-              await findOrCreateFriend(personName);
+              await findOrCreateFriend(userId, personName);
             }
           }
         }
@@ -213,7 +224,7 @@ export default function HomePage() {
     } finally {
       setIsChatLoading(false);
     }
-  }, [addMessage, refreshActivities]);
+  }, [addMessage, refreshActivities, userId]);
 
   const handleSend = useCallback(() => {
     const text = inputText.trim();

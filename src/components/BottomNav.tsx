@@ -14,7 +14,14 @@ export default function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  if (location.pathname === '/add' || location.pathname === '/settings' || location.pathname === '/notifications') return null;
+  if (
+    location.pathname === '/add'
+    || location.pathname === '/settings'
+    || location.pathname === '/notifications'
+    || location.pathname === '/auth'
+    || location.pathname === '/auth/callback'
+    || location.pathname === '/reset-password'
+  ) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border safe-bottom">

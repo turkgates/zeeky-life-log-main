@@ -11,12 +11,12 @@ import {
   fetchFavoriteActivities,
   deleteActivityById,
   FavoriteActivity,
-  TEST_USER_ID,
 } from '@/lib/activitySupabase';
 import { supabase } from '@/lib/supabase';
 import { Activity } from '@/types/zeeky';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
+import { useAuthStore } from '@/store/useAuthStore';
 
 const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 const DAY_SHORT = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
@@ -46,6 +46,8 @@ function getWeekDays(base: Date): Date[] {
 
 export default function HistoryPage() {
   const navigate       = useNavigate();
+  const { user }       = useAuthStore();
+  const userId         = user?.id ?? '';
   const currencySymbol = useCurrencyStore(s => s.symbol);
   const refreshKey     = useActivityRefresh(s => s.key);
 
@@ -77,18 +79,19 @@ export default function HistoryPage() {
 
   // Load dates that have activities for the visible month (for dots)
   const loadDatesForMonth = useCallback(async (year: number, month: number) => {
+    if (!userId) return;
     const startOfMonth = new Date(year, month, 1).toISOString();
     const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
     const { data } = await supabase
       .from('activities')
       .select('activity_date')
-      .eq('user_id', TEST_USER_ID)
+      .eq('user_id', userId)
       .gte('activity_date', startOfMonth)
       .lte('activity_date', endOfMonth);
     if (data) {
       setDatesWithData(new Set(data.map(r => toYMD(new Date(r.activity_date as string)))));
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     void loadDatesForMonth(viewYear, viewMonth);
@@ -98,12 +101,12 @@ export default function HistoryPage() {
   const loadDayActivities = useCallback(async (date: string) => {
     setDayLoading(true);
     try {
-      const list = await fetchActivitiesByDate(date);
+      const list = await fetchActivitiesByDate(userId, date);
       setDayActivities(list);
     } finally {
       setDayLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     void loadDayActivities(selectedDate);
@@ -111,9 +114,9 @@ export default function HistoryPage() {
 
   // Load favorites
   const loadFavorites = useCallback(async () => {
-    const list = await fetchFavoriteActivities();
+    const list = await fetchFavoriteActivities(userId);
     setFavorites(list);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     void loadFavorites();
@@ -121,7 +124,7 @@ export default function HistoryPage() {
 
   // Handlers
   const handleDeleteConfirm = async (id: string) => {
-    const ok = await deleteActivityById(id);
+    const ok = await deleteActivityById(userId, id);
     if (ok) {
       void loadDayActivities(selectedDate);
       void loadDatesForMonth(viewYear, viewMonth);
@@ -131,12 +134,13 @@ export default function HistoryPage() {
   };
 
   const handleQuickLog = async (fav: FavoriteActivity) => {
+    if (!userId) return;
     const now = new Date().toISOString();
 
     const { data, error } = await supabase
       .from('activities')
       .insert({
-        user_id:      TEST_USER_ID,
+        user_id:      userId,
         title:        fav.title,
         category:     fav.category,
         amount:       fav.amount ?? null,
@@ -163,11 +167,12 @@ export default function HistoryPage() {
   };
 
   const removeFromFavorites = async (fav: FavoriteActivity) => {
+    if (!userId) return;
     const { error } = await supabase
       .from('activities')
       .update({ is_favorite: false })
       .eq('id', fav.id)
-      .eq('user_id', TEST_USER_ID);
+      .eq('user_id', userId);
     if (!error) {
       toast.success('Favorilerden çıkarıldı');
       await loadFavorites();
@@ -183,11 +188,12 @@ export default function HistoryPage() {
   };
 
   const confirmDeleteFavorite = async (fav: FavoriteActivity) => {
+    if (!userId) return;
     const { error } = await supabase
       .from('activities')
       .delete()
       .eq('id', fav.id)
-      .eq('user_id', TEST_USER_ID);
+      .eq('user_id', userId);
     if (!error) {
       toast.success('Eylem silindi');
       await loadFavorites();
@@ -367,7 +373,7 @@ export default function HistoryPage() {
           activity={selectedActivity}
           onClose={() => setSelectedActivity(null)}
           onDelete={async id => {
-            await deleteActivityById(id);
+            await deleteActivityById(userId, id);
             void loadDayActivities(selectedDate);
             void loadDatesForMonth(viewYear, viewMonth);
             setSelectedActivity(null);

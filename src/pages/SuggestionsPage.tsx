@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Filter, Check, X, Heart, Coins, Users, Activity, RefreshCw, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-
-const USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
+import { useAuthStore } from '@/store/useAuthStore';
 
 type CategoryKey = 'all' | 'sağlık' | 'sosyal' | 'finans' | 'alışkanlık';
 type StatusFilter = 'all' | 'pending' | 'accepted' | 'skipped';
@@ -47,13 +46,15 @@ interface Suggestion {
 }
 
 async function fetchSuggestions(
+  userId: string,
   status: StatusFilter,
   category: CategoryKey,
 ): Promise<Suggestion[]> {
+  if (!userId) return [];
   let query = supabase
     .from('suggestions')
     .select('*')
-    .eq('user_id', USER_ID)
+    .eq('user_id', userId)
     .order('generated_at', { ascending: false });
 
   if (status !== 'all') {
@@ -69,6 +70,8 @@ async function fetchSuggestions(
 }
 
 export default function SuggestionsPage() {
+  const { user } = useAuthStore();
+  const userId = user?.id ?? '';
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
   const [filterCategory, setFilterCategory] = useState<CategoryKey>('all');
   const [showFilterSheet, setShowFilterSheet] = useState(false);
@@ -82,6 +85,7 @@ export default function SuggestionsPage() {
   const filterActive = filterStatus !== 'all' || filterCategory !== 'all';
 
   const generateSuggestions = useCallback(async (mode: 'auto' | 'refresh' = 'auto') => {
+    if (!userId) return;
     setIsGenerating(true);
     try {
       const response = await fetch(
@@ -94,7 +98,7 @@ export default function SuggestionsPage() {
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY as string,
           },
           body: JSON.stringify({
-            user_id: USER_ID,
+            user_id: userId,
             mode,
           }),
         }
@@ -111,46 +115,55 @@ export default function SuggestionsPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, []);
+  }, [userId]);
 
   const refreshSuggestions = useCallback(async () => {
+    if (!userId) return;
     const today = new Date().toISOString().split('T')[0];
     await supabase
       .from('suggestions')
       .delete()
-      .eq('user_id', USER_ID)
+      .eq('user_id', userId)
       .eq('status', 'pending')
       .gte('generated_at', `${today}T00:00:00.000Z`);
     setSuggestions([]);
     await generateSuggestions('refresh');
-    const list = await fetchSuggestions(filterStatus, filterCategory);
+    const list = await fetchSuggestions(userId, filterStatus, filterCategory);
     setSuggestions(list);
-  }, [generateSuggestions, filterStatus, filterCategory]);
+  }, [generateSuggestions, filterStatus, filterCategory, userId]);
 
   const handleAccept = async (id: string) => {
+    if (!userId) return;
     await supabase
       .from('suggestions')
       .update({ status: 'accepted', responded_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
     setSuggestions(prev => prev.filter(s => s.id !== id));
   };
 
   const handleSkip = async (id: string) => {
+    if (!userId) return;
     await supabase
       .from('suggestions')
       .update({ status: 'skipped', responded_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
     setSuggestions(prev => prev.filter(s => s.id !== id));
   };
 
   // İlk yükleme: gerekirse üret, sonra listeyi çek
   useEffect(() => {
     const init = async () => {
+      if (!userId) {
+        setIsLoading(false);
+        return;
+      }
       const today = new Date().toISOString().split('T')[0];
       const { data: todaySuggestions } = await supabase
         .from('suggestions')
         .select('id')
-        .eq('user_id', USER_ID)
+        .eq('user_id', userId)
         .eq('status', 'pending')
         .gte('generated_at', `${today}T00:00:00.000Z`)
         .lte('generated_at', `${today}T23:59:59.999Z`)
@@ -159,12 +172,12 @@ export default function SuggestionsPage() {
       if (!todaySuggestions || todaySuggestions.length === 0) {
         await generateSuggestions('auto');
       }
-      const list = await fetchSuggestions('all', 'all');
+      const list = await fetchSuggestions(userId, 'all', 'all');
       setSuggestions(list);
       setIsLoading(false);
     };
     void init();
-  }, [generateSuggestions]);
+  }, [generateSuggestions, userId]);
 
   useEffect(() => {
     if (showFilterSheet) {
@@ -174,12 +187,13 @@ export default function SuggestionsPage() {
   }, [showFilterSheet, filterStatus, filterCategory]);
 
   const applyFilters = async () => {
+    if (!userId) return;
     setFilterStatus(sheetStatus);
     setFilterCategory(sheetCategory);
     setShowFilterSheet(false);
     setIsLoading(true);
     try {
-      const list = await fetchSuggestions(sheetStatus, sheetCategory);
+      const list = await fetchSuggestions(userId, sheetStatus, sheetCategory);
       setSuggestions(list);
     } finally {
       setIsLoading(false);

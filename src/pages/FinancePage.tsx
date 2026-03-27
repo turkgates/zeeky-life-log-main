@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Plus, Filter, Sparkles, ArrowRight, RefreshCw, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/lib/utils';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -26,7 +27,6 @@ import {
   addTransaction,
   deleteTransaction,
   MONTH_SHORT,
-  TX_USER_ID,
 } from '@/lib/transactionSupabase';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -54,6 +54,8 @@ function humanDate(dateStr: string) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function FinancePage() {
+  const { user } = useAuthStore();
+  const userId = user?.id ?? '';
   const { symbol: currencySymbol, code: currencyCode } = useCurrencyStore();
 
   const now = new Date();
@@ -92,6 +94,7 @@ export default function FinancePage() {
 
   // ── AI suggestion ────────────────────────────────────────────────────────
   const fetchAiSuggestion = useCallback(async () => {
+    if (!userId) return;
     setAiLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -100,7 +103,7 @@ export default function FinancePage() {
       const { data: existing } = await supabase
         .from('suggestions')
         .select('content, generated_at')
-        .eq('user_id', TX_USER_ID)
+        .eq('user_id', userId)
         .eq('category', 'finans')
         .gte('generated_at', `${today}T00:00:00.000Z`)
         .lte('generated_at', `${today}T23:59:59.999Z`)
@@ -121,7 +124,7 @@ export default function FinancePage() {
       const { data: txData } = await supabase
         .from('transactions')
         .select('type, amount, category')
-        .eq('user_id', TX_USER_ID)
+        .eq('user_id', userId)
         .gte('transaction_date', startOfMonth)
         .lte('transaction_date', endOfMonth);
 
@@ -137,7 +140,7 @@ export default function FinancePage() {
         },
         body: JSON.stringify({
           message: `Bu ayki finansal durumumu analiz et ve tek cümle öneri ver. Gelir: ${income}${currencySymbol}, Gider: ${expense}${currencySymbol}, Bakiye: ${income - expense}${currencySymbol}`,
-          user_id: TX_USER_ID,
+          user_id: userId,
           personality: 'balanced',
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           current_datetime: new Date().toISOString(),
@@ -151,7 +154,7 @@ export default function FinancePage() {
         setAiSuggestion(cleanReply);
         // 3. Save to suggestions table
         await supabase.from('suggestions').insert({
-          user_id: TX_USER_ID,
+          user_id: userId,
           category: 'finans',
           content: cleanReply,
           status: 'pending',
@@ -166,19 +169,20 @@ export default function FinancePage() {
     } finally {
       setAiLoading(false);
     }
-  }, [currencySymbol]);
+  }, [currencySymbol, userId]);
 
   // Helper: invalidate today's cached suggestion then regenerate
   const invalidateAndRefreshAdvice = useCallback(async () => {
+    if (!userId) return;
     const today = new Date().toISOString().split('T')[0];
     await supabase
       .from('suggestions')
       .delete()
-      .eq('user_id', TX_USER_ID)
+      .eq('user_id', userId)
       .eq('category', 'finans')
       .gte('generated_at', `${today}T00:00:00.000Z`);
     void fetchAiSuggestion();
-  }, [fetchAiSuggestion]);
+  }, [fetchAiSuggestion, userId]);
 
   useEffect(() => {
     if (!txLoading) void fetchAiSuggestion();
@@ -190,12 +194,16 @@ export default function FinancePage() {
       setChartData(computeWeeklyChart(transactions));
       return;
     }
+    if (!userId) {
+      setChartData([]);
+      return;
+    }
     setChartLoading(true);
     const fetch = period === 'monthly'
-      ? fetchMonthlyChart(6)
-      : fetchYearlyChart(viewYear);
+      ? fetchMonthlyChart(userId, 6)
+      : fetchYearlyChart(userId, viewYear);
     fetch.then(d => { setChartData(d); setChartLoading(false); });
-  }, [period, transactions, viewYear]);
+  }, [period, transactions, viewYear, userId]);
 
   // ── Summaries ────────────────────────────────────────────────────────────
   const totalIncome  = useMemo(() => transactions.filter(t => t.type === 'income' ).reduce((s, t) => s + t.amount, 0), [transactions]);
@@ -289,7 +297,8 @@ export default function FinancePage() {
   };
 
   const handleDeleteTx = async (id: string) => {
-    const ok = await deleteTransaction(id);
+    if (!userId) return;
+    const ok = await deleteTransaction(userId, id);
     if (ok) { toast.success('İşlem silindi'); void loadTransactions(); }
     setDeleteConfirm(null);
     setSwipedCardId(null);
@@ -517,6 +526,7 @@ export default function FinancePage() {
       {/* ── Modals ───────────────────────────────────────────────────────── */}
       {showAdd && (
         <AddTransactionModal
+          userId={userId}
           currencySymbol={currencySymbol}
           currencyCode={currencyCode}
           onClose={() => setShowAdd(false)}
@@ -526,13 +536,15 @@ export default function FinancePage() {
 
       {selectedTx && (
         <TransactionDetailSheet
+          userId={userId}
           transaction={selectedTx}
           categories={categories}
           currencySymbol={currencySymbol}
           onClose={() => setSelectedTx(null)}
           onSaved={() => { setSelectedTx(null); void loadTransactions(); }}
           onDelete={async (id, opts) => {
-            const ok = await deleteTransaction(id, opts);
+            if (!userId) return false;
+            const ok = await deleteTransaction(userId, id, opts);
             if (ok) { toast.success('İşlem silindi'); void loadTransactions(); }
             setSelectedTx(null);
           }}
@@ -598,7 +610,8 @@ const EXPENSE_CATS = Object.keys(EXPENSE_SUBS);
 
 // ── Add Transaction Modal ─────────────────────────────────────────────────────
 
-function AddTransactionModal({ currencySymbol, currencyCode, onClose, onSaved }: {
+function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, onSaved }: {
+  userId: string;
   currencySymbol: string;
   currencyCode:   string;
   onClose:  () => void;
@@ -618,8 +631,9 @@ function AddTransactionModal({ currencySymbol, currencyCode, onClose, onSaved }:
 
   const handleSave = async () => {
     if (!amount || !category) { toast.error('Tutar ve kategori zorunlu'); return; }
+    if (!userId) { toast.error('Oturum yok'); return; }
     setSaving(true);
-    const ok = await addTransaction({
+    const ok = await addTransaction(userId, {
       type,
       title: title.trim() || category,
       amount: parseFloat(amount),

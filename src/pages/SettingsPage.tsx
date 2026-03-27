@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sun, Moon, Bell, Globe, Info, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Bell, Globe, Info, Trash2, Loader2, Lock } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { CURRENCIES, getCurrencySymbol } from '@/lib/currency';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { toast } from 'sonner';
-
-const USER_ID = '520ffdd8-fd9e-472f-a388-021bded37b7f';
 
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
@@ -23,6 +22,8 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? '';
   const { theme, toggle } = useTheme();
   const [notifAll, setNotifAll] = useState(true);
   const [notifReminder, setNotifReminder] = useState(true);
@@ -33,13 +34,23 @@ export default function SettingsPage() {
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [aiPersonality, setAiPersonality] = useState<'balanced' | 'strict' | 'gentle'>('balanced');
 
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+
   useEffect(() => {
     const load = async () => {
+      if (!userId) {
+        setPrefsLoading(false);
+        return;
+      }
       setPrefsLoading(true);
       try {
         const [u, p] = await Promise.all([
-          supabase.from('users').select('currency, currency_symbol').eq('id', USER_ID).single(),
-          supabase.from('user_profiles').select('ai_personality').eq('user_id', USER_ID).single(),
+          supabase.from('users').select('currency, currency_symbol').eq('id', userId).single(),
+          supabase.from('user_profiles').select('ai_personality').eq('user_id', userId).single(),
         ]);
         if (u.data?.currency) {
           const sym = u.data.currency_symbol || getCurrencySymbol(u.data.currency);
@@ -53,17 +64,18 @@ export default function SettingsPage() {
       }
     };
     void load();
-  }, [setGlobalCurrency]);
+  }, [setGlobalCurrency, userId]);
 
   const currencyCode = useCurrencyStore(s => s.code);
 
   const handleCurrencyChange = async (code: string) => {
+    if (!userId) return;
     const c = CURRENCIES.find(x => x.code === code);
     if (!c) return;
     const { error } = await supabase
       .from('users')
       .update({ currency: c.code, currency_symbol: c.symbol })
-      .eq('id', USER_ID);
+      .eq('id', userId);
     if (error) {
       console.error(error);
       toast.error('Para birimi kaydedilemedi');
@@ -74,17 +86,58 @@ export default function SettingsPage() {
   };
 
   const handlePersonalityChange = async (v: 'balanced' | 'strict' | 'gentle') => {
+    if (!userId) return;
     setAiPersonality(v);
     const { error } = await supabase
       .from('user_profiles')
       .update({ ai_personality: v })
-      .eq('user_id', USER_ID);
+      .eq('user_id', userId);
     if (error) {
       console.error(error);
       toast.error('Kişilik kaydedilemedi');
       return;
     }
     toast.success('Zeeky kişiliği güncellendi');
+  };
+
+  const handlePasswordSave = async () => {
+    setPasswordError(null);
+    if (!user?.email) {
+      toast.error('Oturum bulunamadı');
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setPasswordError('Yeni şifreler eşleşmiyor');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError('Yeni şifre en az 6 karakter olmalı');
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (signInError) {
+        setPasswordError('Mevcut şifre yanlış');
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) {
+        setPasswordError(error.message);
+        return;
+      }
+      toast.success('Şifre güncellendi');
+      setCurrentPassword('');
+      setNewPassword('');
+      setNewPasswordConfirm('');
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   return (
@@ -117,6 +170,58 @@ export default function SettingsPage() {
               ))}
             </select>
           )}
+        </div>
+
+        {/* Şifre Değiştir */}
+        <div className="bg-card border border-border rounded-2xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <Lock className="w-5 h-5 text-primary" />
+            <h2 className="text-sm font-semibold">Şifre Değiştir</h2>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Mevcut şifre</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Yeni şifre</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Yeni şifre tekrar</label>
+              <input
+                type="password"
+                value={newPasswordConfirm}
+                onChange={e => setNewPasswordConfirm(e.target.value)}
+                autoComplete="new-password"
+                className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors"
+              />
+            </div>
+            {passwordError && (
+              <p className="text-xs text-destructive">{passwordError}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => void handlePasswordSave()}
+              disabled={passwordSaving}
+              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {passwordSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Kaydet
+            </button>
+          </div>
         </div>
 
         {/* Zeeky kişiliği */}

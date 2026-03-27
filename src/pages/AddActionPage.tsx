@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Loader2, Star } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { TEST_USER_ID } from '@/lib/activitySupabase';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
 import { toast } from 'sonner';
@@ -66,6 +66,8 @@ const labelCls = "text-[11px] font-semibold text-foreground/50 mb-1.5 block uppe
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AddActionPage() {
   const navigate       = useNavigate();
+  const { user }       = useAuthStore();
+  const userId         = user?.id ?? '';
   const location       = useLocation();
   const state          = location.state as { editId?: string; category?: string } | null;
   const editId         = state?.editId;
@@ -102,12 +104,12 @@ export default function AddActionPage() {
 
   // ── Load existing activity (edit mode) ────────────────────────────────────
   useEffect(() => {
-    if (!editId) return;
+    if (!editId || !userId) return;
     supabase
       .from('activities')
       .select('*')
       .eq('id', editId)
-      .eq('user_id', TEST_USER_ID)
+      .eq('user_id', userId)
       .single()
       .then(({ data, error }) => {
         if (error || !data) return;
@@ -126,7 +128,7 @@ export default function AddActionPage() {
         setNotes(data.raw_message ?? '');
       })
       .finally(() => setLoading(false));
-  }, [editId]);
+  }, [editId, userId]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const cat = getCat(selCat);
@@ -142,6 +144,10 @@ export default function AddActionPage() {
     if (selCat === 'alışveriş' && !amount) {
       toast.error('Tutar zorunludur'); return;
     }
+    if (!userId) {
+      toast.error('Oturum yok');
+      return;
+    }
     setSaving(true);
     try {
       let durationMins: number | null = null;
@@ -152,7 +158,7 @@ export default function AddActionPage() {
       }
 
       const activityPayload = {
-        user_id:      TEST_USER_ID,
+        user_id:      userId,
         title:        title.trim(),
         category:     selCat,
         amount:       amount ? parseFloat(amount) : null,
@@ -170,7 +176,7 @@ export default function AddActionPage() {
           .from('activities')
           .update(activityPayload)
           .eq('id', editId)
-          .eq('user_id', TEST_USER_ID);
+          .eq('user_id', userId);
         if (error) { console.error(error); toast.error('Kaydedilemedi'); return; }
       } else {
         const { error } = await supabase.from('activities').insert(activityPayload);
@@ -180,7 +186,7 @@ export default function AddActionPage() {
       // Also save to transactions for alışveriş and yeme-içme when amount is set
       if (!isEditing && ['alışveriş', 'yeme-içme'].includes(selCat) && amount) {
         await supabase.from('transactions').insert({
-          user_id:          TEST_USER_ID,
+          user_id:          userId,
           type:             'expense',
           title:            title.trim(),
           amount:           parseFloat(amount),
@@ -208,7 +214,7 @@ export default function AddActionPage() {
         .from('activities')
         .delete()
         .eq('id', editId)
-        .eq('user_id', TEST_USER_ID);
+        .eq('user_id', userId);
       if (error) { toast.error('Silinemedi'); return; }
       toast.success('Eylem silindi');
       refresh();
@@ -370,6 +376,7 @@ export default function AddActionPage() {
             <div>
               <label className={labelCls}>Kişiler</label>
               <FriendAutocomplete
+                userId={userId}
                 value={people}
                 onChange={setPeople}
                 placeholder="Kişi ara veya ekle..."
@@ -423,6 +430,7 @@ export default function AddActionPage() {
             <div>
               <label className={labelCls}>Kişiler</label>
               <FriendAutocomplete
+                userId={userId}
                 value={people}
                 onChange={setPeople}
                 placeholder="Kişi ara veya ekle..."
@@ -483,6 +491,7 @@ export default function AddActionPage() {
             <div>
               <label className={labelCls}>Kişiler</label>
               <FriendAutocomplete
+                userId={userId}
                 value={people}
                 onChange={setPeople}
                 placeholder="Kişi ara veya ekle..."

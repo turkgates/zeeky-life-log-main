@@ -5,7 +5,6 @@ import {
   Transaction,
   TransactionCategory,
   updateTransaction,
-  TX_USER_ID,
 } from '@/lib/transactionSupabase';
 import { toast } from 'sonner';
 
@@ -24,6 +23,7 @@ function getFrequencyLabel(f: string) {
 }
 
 interface Props {
+  userId: string;
   transaction: Transaction | null;
   categories:  TransactionCategory[];
   currencySymbol: string;
@@ -33,6 +33,7 @@ interface Props {
 }
 
 export default function TransactionDetailSheet({
+  userId,
   transaction, categories, currencySymbol, onClose, onSaved, onDelete,
 }: Props) {
   const [editMode,          setEditMode]          = useState(false);
@@ -74,7 +75,7 @@ export default function TransactionDetailSheet({
   const handleSave = async () => {
     if (!editTitle.trim() || !editAmount) { toast.error('Başlık ve tutar zorunlu'); return; }
     setSaving(true);
-    const ok = await updateTransaction(transaction.id, {
+    const ok = await updateTransaction(userId, transaction.id, {
       title:            editTitle.trim(),
       type:             editType,
       amount:           parseFloat(editAmount),
@@ -318,6 +319,3 @@ export default function TransactionDetailSheet({
     </>
   );
 }
-
-// Re-export TX_USER_ID for backward compat if needed
-export { TX_USER_ID };
