@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sun, Moon, Bell, Globe, Info, Trash2, Loader2, Lock } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Bell, Globe, Info, Trash2, Loader2 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -38,7 +38,8 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -100,7 +101,7 @@ export default function SettingsPage() {
     toast.success('Zeeky kişiliği güncellendi');
   };
 
-  const handlePasswordSave = async () => {
+  const handlePasswordChange = async () => {
     setPasswordError(null);
     if (!user?.email) {
       toast.error('Oturum bulunamadı');
@@ -114,7 +115,7 @@ export default function SettingsPage() {
       setPasswordError('Yeni şifre en az 6 karakter olmalı');
       return;
     }
-    setPasswordSaving(true);
+    setIsChangingPassword(true);
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: user.email,
@@ -136,7 +137,7 @@ export default function SettingsPage() {
       setNewPassword('');
       setNewPasswordConfirm('');
     } finally {
-      setPasswordSaving(false);
+      setIsChangingPassword(false);
     }
   };
 
@@ -172,56 +173,83 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {/* Şifre Değiştir */}
-        <div className="bg-card border border-border rounded-2xl p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <Lock className="w-5 h-5 text-primary" />
-            <h2 className="text-sm font-semibold">Şifre Değiştir</h2>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Mevcut şifre</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                autoComplete="current-password"
-                className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors"
-              />
+        {/* Şifre Değiştir — accordion */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden dark:bg-card dark:border-border">
+          <button
+            type="button"
+            onClick={() => setIsPasswordOpen(!isPasswordOpen)}
+            className="w-full flex items-center justify-between px-4 py-4 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-950/50 flex items-center justify-center">
+                🔒
+              </div>
+              <span className="font-medium text-gray-800 dark:text-foreground">Şifre Değiştir</span>
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Yeni şifre</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                autoComplete="new-password"
-                className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Yeni şifre tekrar</label>
-              <input
-                type="password"
-                value={newPasswordConfirm}
-                onChange={e => setNewPasswordConfirm(e.target.value)}
-                autoComplete="new-password"
-                className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors"
-              />
-            </div>
-            {passwordError && (
-              <p className="text-xs text-destructive">{passwordError}</p>
-            )}
-            <button
-              type="button"
-              onClick={() => void handlePasswordSave()}
-              disabled={passwordSaving}
-              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+            <svg
+              className={cn(
+                'w-5 h-5 text-gray-400 transition-transform duration-200 shrink-0 dark:text-muted-foreground',
+                isPasswordOpen ? 'rotate-180' : '',
+              )}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden
             >
-              {passwordSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Kaydet
-            </button>
-          </div>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {isPasswordOpen && (
+            <div className="px-4 pb-4 border-t border-gray-100 dark:border-border">
+              <div className="space-y-3 mt-4">
+                <div>
+                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">Mevcut Şifre</label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="w-full border border-gray-200 dark:border-border dark:bg-muted rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 dark:focus:border-accent"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">Yeni Şifre</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 dark:border-border dark:bg-muted rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 dark:focus:border-accent"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">Yeni Şifre Tekrar</label>
+                  <input
+                    type="password"
+                    value={newPasswordConfirm}
+                    onChange={e => setNewPasswordConfirm(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 dark:border-border dark:bg-muted rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 dark:focus:border-accent"
+                    placeholder="••••••••"
+                  />
+                </div>
+                {passwordError && (
+                  <p className="text-red-500 text-sm">{passwordError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void handlePasswordChange()}
+                  disabled={isChangingPassword}
+                  className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium text-sm disabled:opacity-50 dark:bg-primary dark:text-primary-foreground"
+                >
+                  {isChangingPassword ? 'Güncelleniyor...' : 'Şifreyi Güncelle'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Zeeky kişiliği */}
