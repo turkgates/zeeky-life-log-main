@@ -379,7 +379,7 @@ export default function FinancePage() {
   }, [showSearch]);
 
   return (
-    <div className="pb-24 max-w-[430px] mx-auto animate-fade-in">
+    <div className="pb-24 w-full animate-fade-in">
 
       {/* ── Header + search (sticky) ───────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-background">
@@ -862,7 +862,7 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
     <div className="fixed inset-0 z-[200] flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40" />
       <div
-        className="relative w-full max-w-[430px] bg-card rounded-t-2xl p-5 pb-8 animate-slide-up max-h-[88vh] overflow-y-auto"
+        className="relative w-full bg-card rounded-t-2xl p-5 pb-8 animate-slide-up max-h-[88vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

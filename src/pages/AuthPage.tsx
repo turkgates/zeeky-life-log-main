@@ -99,7 +99,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white max-w-[430px] mx-auto px-6 pt-16 pb-10">
+    <div className="min-h-screen bg-white w-full px-6 pt-16 pb-10">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-blue-600 mb-2">Zeeky</h1>
         <p className="text-sm text-gray-500">Kişisel yapay zeka yaşam koçun</p>

@@ -25,7 +25,7 @@ export default function BottomNav() {
 
   return (
     <nav className="sticky bottom-0 z-50 w-full shrink-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700 safe-bottom">
-      <div className="max-w-[430px] mx-auto flex items-center justify-around px-1 h-16">
+      <div className="w-full flex items-center justify-around px-1 h-16">
         {tabs.map((tab) => {
           const isActive = location.pathname === tab.path;
           return (

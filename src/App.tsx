@@ -44,7 +44,7 @@ function AppRoutes() {
   return (
     <>
       <CurrencyLoader />
-      <div className="min-h-screen flex flex-col bg-background max-w-[430px] mx-auto w-full">
+      <div className="min-h-screen flex flex-col bg-background w-full">
         <div className="flex-1 min-h-0 flex flex-col w-full">
           <Routes>
             <Route path="/auth" element={<AuthPage />} />

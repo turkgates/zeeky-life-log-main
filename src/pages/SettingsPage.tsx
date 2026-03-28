@@ -231,7 +231,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background max-w-[430px] mx-auto animate-slide-up">
+    <div className="min-h-screen bg-background w-full animate-slide-up">
       <div className="flex items-center gap-3 p-4 border-b border-border">
         <button onClick={() => navigate(-1)} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-muted">
           <ArrowLeft className="w-5 h-5" />

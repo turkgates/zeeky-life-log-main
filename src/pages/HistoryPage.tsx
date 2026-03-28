@@ -278,7 +278,7 @@ export default function HistoryPage() {
   })();
 
   return (
-    <div className="pb-24 max-w-[430px] mx-auto animate-fade-in">
+    <div className="pb-24 w-full animate-fade-in">
 
       {/* ── Title + search (sticky) ───────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-background">

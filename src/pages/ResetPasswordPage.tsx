@@ -32,7 +32,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background max-w-[430px] mx-auto px-6 pt-16 pb-10">
+    <div className="min-h-screen bg-background w-full px-6 pt-16 pb-10">
       <h1 className="text-lg font-semibold mb-2">Yeni şifre</h1>
       <p className="text-sm text-muted-foreground mb-6">Yeni şifrenizi belirleyin.</p>
       <form onSubmit={handleSubmit} className="space-y-4">

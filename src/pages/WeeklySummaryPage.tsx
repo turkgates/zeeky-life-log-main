@@ -156,7 +156,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
         aria-hidden
       />
       <div
-        className="fixed inset-x-0 bottom-0 z-[401] flex max-h-[min(92dvh,920px)] flex-col rounded-t-3xl bg-white shadow-2xl max-w-[430px] mx-auto w-full"
+        className="fixed inset-x-0 bottom-0 z-[401] flex max-h-[min(92dvh,920px)] flex-col rounded-t-3xl bg-white shadow-2xl w-full"
         style={{
           transform: `translateY(${dragOffset}px)`,
           transition: dragging.current ? 'none' : 'transform 200ms ease',

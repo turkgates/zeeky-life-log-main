@@ -73,6 +73,7 @@ export default function HomePage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef             = useRef<HTMLTextAreaElement>(null);
   const loadingOlderRef = useRef(false);
+  const prevMessageCountRef = useRef(0);
 
   const todayDate = new Date().toLocaleDateString('tr-TR', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -197,15 +198,48 @@ export default function HomePage() {
     };
   }, [setScrollPosition]);
 
-  useEffect(() => {
-    if (!isLoaded) return;
+  const scrollToBottom = useCallback((smooth = false) => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    if (loadingOlderRef.current) return;
-    requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
     });
-  }, [isLoaded, messages.length]);
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded && messages.length > 0) {
+      scrollToBottom(false);
+    }
+  }, [isLoaded, scrollToBottom]);
+
+  useEffect(() => {
+    if (loadingOlderRef.current) {
+      prevMessageCountRef.current = messages.length;
+      return;
+    }
+    const len = messages.length;
+    if (len === 0) {
+      prevMessageCountRef.current = 0;
+      return;
+    }
+    if (prevMessageCountRef.current === 0) {
+      prevMessageCountRef.current = len;
+      return;
+    }
+    if (len !== prevMessageCountRef.current) {
+      prevMessageCountRef.current = len;
+      scrollToBottom(true);
+    }
+  }, [messages.length, scrollToBottom]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      window.setTimeout(() => scrollToBottom(false), 100);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [scrollToBottom]);
 
   // Pull older messages when scrolled to top
   const handleScroll = useCallback(() => {
@@ -325,7 +359,10 @@ export default function HomePage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-    <div className="flex flex-col flex-1 min-h-0 w-full bg-white dark:bg-gray-900">
+    <div
+      className="flex flex-col w-full bg-white dark:bg-gray-900"
+      style={{ height: 'calc(100vh - 64px)' }}
+    >
 
       {/* ── Üst bar ─────────────────────────────────────────────────────────── */}
       <div className="flex-none px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900">
@@ -367,7 +404,7 @@ export default function HomePage() {
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 bg-white dark:bg-gray-900"
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3"
         style={{ overscrollBehavior: 'contain' }}
       >
         {isLoadingMore && (
@@ -417,11 +454,11 @@ export default function HomePage() {
           </>
         )}
 
-        <div ref={messagesEndRef} className="h-4" />
+        <div ref={messagesEndRef} />
       </div>
 
       {/* ── Input ───────────────────────────────────────────────────────────── */}
-      <div className="flex-none bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
+      <div className="flex-none sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
         <div className="flex items-center gap-2 px-4 py-2">
           <button
             type="button"

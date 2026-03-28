@@ -238,7 +238,7 @@ export default function AddActionPage() {
   // ═══════════════════════════════════════════════════════════════════════════
   if (step === 'category') {
     return (
-      <div className="min-h-screen bg-background max-w-[430px] mx-auto flex flex-col">
+      <div className="min-h-screen bg-background w-full flex flex-col">
         {/* Header */}
         <div className="px-4 pt-12 pb-6">
           <button
@@ -286,7 +286,7 @@ export default function AddActionPage() {
   const catColor = cat.color;
 
   return (
-    <div className="min-h-screen bg-background max-w-[430px] mx-auto flex flex-col">
+    <div className="min-h-screen bg-background w-full flex flex-col">
 
       {/* ── Colored Header ─────────────────────────────────────────────────── */}
       <div className="px-4 pt-10 pb-5" style={{ backgroundColor: catColor }}>
@@ -624,7 +624,7 @@ export default function AddActionPage() {
       </div>
 
       {/* ── Fixed Save Button ───────────────────────────────────────────────── */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pb-6 pt-3 bg-background/90 backdrop-blur-sm border-t border-border">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full px-4 pb-6 pt-3 bg-background/90 backdrop-blur-sm border-t border-border">
         <button
           onClick={handleSave}
           disabled={saving}

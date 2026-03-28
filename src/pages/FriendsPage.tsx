@@ -218,7 +218,7 @@ export default function FriendsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background max-w-[430px] mx-auto pb-28 relative">
+    <div className="min-h-screen bg-background w-full pb-28 relative">
       {/* Blue header */}
       <div className="bg-blue-600 text-white px-4 pt-12 pb-4 rounded-b-3xl shadow-sm">
         <div className="flex items-center justify-between mb-2">
@@ -367,7 +367,7 @@ export default function FriendsPage() {
             onClick={() => !saving && setSheetOpen(false)}
           />
           <div
-            className="fixed inset-x-0 bottom-0 z-[301] bg-card rounded-t-3xl shadow-2xl max-w-[430px] mx-auto max-h-[90vh] overflow-y-auto"
+            className="fixed inset-x-0 bottom-0 z-[301] bg-card rounded-t-3xl shadow-2xl w-full max-h-[90vh] overflow-y-auto"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
           >
             <div className="flex justify-center pt-3 pb-1">

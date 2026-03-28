@@ -215,7 +215,7 @@ export default function NotificationsPage() {
 
   if (!userId) {
     return (
-      <div className="min-h-screen bg-gray-50 max-w-[430px] mx-auto flex flex-col">
+      <div className="min-h-screen bg-gray-50 w-full flex flex-col">
         <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
           <button
             type="button"
@@ -234,7 +234,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-[430px] mx-auto flex flex-col">
+    <div className="min-h-screen bg-gray-50 w-full flex flex-col">
 
       {/* Header */}
       <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">

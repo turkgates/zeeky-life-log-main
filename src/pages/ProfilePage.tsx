@@ -513,7 +513,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="pb-32 max-w-[430px] mx-auto animate-fade-in">
+    <div className="pb-32 w-full animate-fade-in">
       <div className="flex items-center justify-between p-4">
         <h1 className="text-lg font-semibold">Bilgilerim</h1>
         <div className="flex gap-3">
@@ -676,7 +676,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Save Button */}
-      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[430px] px-4 pointer-events-none">
+      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full px-4 pointer-events-none">
         <button
           onClick={handleSave}
           disabled={saving}

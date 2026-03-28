@@ -218,7 +218,7 @@ export default function SuggestionsPage() {
   const showSpinner = isLoading || isGenerating;
 
   return (
-    <div className="pb-24 max-w-[430px] mx-auto animate-fade-in relative">
+    <div className="pb-24 w-full animate-fade-in relative">
 
       {/* Header + search (sticky) */}
       <div className="sticky top-0 z-10 bg-background px-4 pb-3">
@@ -367,7 +367,7 @@ export default function SuggestionsPage() {
             onClick={() => setShowFilterSheet(false)}
           />
           <div
-            className="fixed inset-x-0 bottom-0 z-[301] bg-card rounded-t-3xl shadow-2xl max-w-[430px] mx-auto"
+            className="fixed inset-x-0 bottom-0 z-[301] bg-card rounded-t-3xl shadow-2xl w-full"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
           >
             <div className="flex justify-center pt-3 pb-1">
