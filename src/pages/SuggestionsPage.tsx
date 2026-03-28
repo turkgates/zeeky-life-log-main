@@ -251,7 +251,7 @@ export default function SuggestionsPage() {
               className="p-2 rounded-full active:bg-muted"
               aria-label="Ara"
             >
-              <Search className="w-5 h-5 text-gray-600 dark:text-muted-foreground" />
+              <Search size={22} className="text-gray-600 dark:text-muted-foreground" />
             </button>
           </div>
         </div>

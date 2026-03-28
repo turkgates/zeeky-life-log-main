@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Plus, Send, Mic } from 'lucide-react';
 import { findOrCreateFriend } from '@/lib/friendsSupabase';
 import { supabase } from '@/lib/supabase';
 import { useChatStore } from '@/store/useChatStore';
@@ -10,6 +11,15 @@ import WeeklySummaryPage from '@/pages/WeeklySummaryPage';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl    = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
+
+const placeholders = [
+  'Bugün ne yaptın?',
+  'Zeeky ile sohbet et...',
+  'Kendini nasıl hissediyorsun?',
+  'Bugün neler geçti?',
+  'Bir şeyler anlat...',
+  'Hedeflerini konuşalım mı?',
+];
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -39,12 +49,15 @@ export default function HomePage() {
   const [isChatLoading,    setIsChatLoading]    = useState(false);
   const [isRecording,      setIsRecording]      = useState(false);
   const [showWeeklySummary, setShowWeeklySummary] = useState(false);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [placeholderVisible, setPlaceholderVisible] = useState(true);
 
   const recognitionRef       = useRef<any>(null);
   const messagesEndRef       = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef          = useRef<HTMLTextAreaElement>(null);
   const smoothScrollPrevRef  = useRef<{ len: number; firstId?: string }>({ len: 0 });
+  const placeholderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const todayDate = new Date().toLocaleDateString('tr-TR', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -63,6 +76,22 @@ export default function HomePage() {
     };
     void run();
   }, [setUnreadCount, userId]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setPlaceholderVisible(false);
+      if (placeholderTimeoutRef.current) clearTimeout(placeholderTimeoutRef.current);
+      placeholderTimeoutRef.current = window.setTimeout(() => {
+        placeholderTimeoutRef.current = null;
+        setPlaceholderIndex(prev => (prev + 1) % placeholders.length);
+        setPlaceholderVisible(true);
+      }, 300);
+    }, 3000);
+    return () => {
+      window.clearInterval(interval);
+      if (placeholderTimeoutRef.current) clearTimeout(placeholderTimeoutRef.current);
+    };
+  }, []);
 
   // ── Load user name (metadata first, then users table) ─────────────────────
   useEffect(() => {
@@ -270,11 +299,10 @@ export default function HomePage() {
     void sendMessage(text);
   }, [inputText, isChatLoading, sendMessage]);
 
-  // Auto-resize textarea
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
     e.target.style.height = 'auto';
-    e.target.style.height = `${e.target.scrollHeight}px`;
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   };
 
   // ── Voice recording ───────────────────────────────────────────────────────
@@ -290,7 +318,7 @@ export default function HomePage() {
       setInputText(prev => prev + t);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
       }
     };
     r.onend = () => setIsRecording(false);
@@ -322,6 +350,15 @@ export default function HomePage() {
             <p className="text-xs text-gray-400 capitalize mt-0.5">{todayDate}</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowWeeklySummary(true)}
+              className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg leading-none active:scale-95 transition-transform"
+              aria-label="Bu haftanı gör"
+              title="Bu haftanı gör"
+            >
+              📊
+            </button>
             <div className="relative">
               <button
                 type="button"
@@ -337,22 +374,6 @@ export default function HomePage() {
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setShowWeeklySummary(true)}
-              className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg leading-none active:scale-95 transition-transform"
-              aria-label="Bu haftanı gör"
-              title="Bu haftanı gör"
-            >
-              📊
-            </button>
-            {/* Add button */}
-            <button
-              onClick={() => navigate('/add')}
-              className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-xl font-light leading-none active:scale-95 transition-transform"
-            >
-              +
-            </button>
           </div>
         </div>
       </div>
@@ -416,11 +437,19 @@ export default function HomePage() {
 
       {/* ── Bottom input area ───────────────────────────────────────────────── */}
       <div
-        className="flex-none px-4 pt-2 pb-3 border-t border-gray-100 bg-white"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
+        className="flex items-end gap-2 px-4 py-3 border-t border-gray-100 bg-white flex-none"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
       >
-        {/* Textarea + send */}
-        <div className="flex items-end gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/add')}
+          className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 flex-shrink-0 mb-1"
+          aria-label="Ekle"
+        >
+          <Plus size={20} />
+        </button>
+
+        <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
             value={inputText}
@@ -431,36 +460,43 @@ export default function HomePage() {
                 handleSend();
               }
             }}
-            placeholder="Zeeky'ye bir şeyler sor veya bugün ne yaptığını anlat..."
-            className="flex-1 resize-none rounded-2xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 transition-colors max-h-32 min-h-[44px] leading-relaxed"
+            placeholder={placeholders[placeholderIndex]}
             rows={1}
+            className="w-full resize-none rounded-3xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-all duration-200"
+            style={{
+              minHeight: '40px',
+              maxHeight: '120px',
+              transition: 'opacity 0.3s ease',
+              opacity: inputText.trim() ? 1 : (placeholderVisible ? 1 : 0.3),
+            }}
           />
-          {inputText.trim() ? (
-            <button
-              onClick={handleSend}
-              disabled={isChatLoading}
-              className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white disabled:opacity-50 flex-shrink-0 active:scale-95 transition-transform"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              onMouseDown={startRecording}
-              onMouseUp={stopRecording}
-              onTouchStart={startRecording}
-              onTouchEnd={stopRecording}
-              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                isRecording ? 'bg-red-500 animate-pulse' : 'bg-gray-100'
-              }`}
-            >
-              <svg className={`w-4 h-4 ${isRecording ? 'text-white' : 'text-gray-500'}`} fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-              </svg>
-            </button>
-          )}
         </div>
+
+        {inputText.trim() ? (
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={isChatLoading}
+            className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white disabled:opacity-50 flex-shrink-0 mb-1"
+            aria-label="Gönder"
+          >
+            <Send size={18} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onMouseDown={startRecording}
+            onMouseUp={stopRecording}
+            onTouchStart={startRecording}
+            onTouchEnd={stopRecording}
+            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mb-1 ${
+              isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-600'
+            }`}
+            aria-label="Sesli giriş"
+          >
+            <Mic size={20} />
+          </button>
+        )}
       </div>
 
       {/* ── Recording overlay ────────────────────────────────────────────────── */}
