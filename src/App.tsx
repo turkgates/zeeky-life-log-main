@@ -45,7 +45,7 @@ function AppRoutes() {
     <>
       <CurrencyLoader />
       <div className="min-h-screen flex flex-col bg-background w-full">
-        <div className="flex-1 min-h-0 flex flex-col w-full">
+        <div className="flex-1 flex flex-col w-full">
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />

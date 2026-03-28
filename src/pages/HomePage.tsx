@@ -12,6 +12,10 @@ import WeeklySummaryPage from '@/pages/WeeklySummaryPage';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl    = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
 
+const BOTTOM_NAV_HEIGHT = 64;
+const TOP_BAR_HEIGHT = 60;
+const INPUT_ROW_HEIGHT = 60;
+
 const placeholders = [
   'Bugün ne yaptın?',
   'Zeeky ile sohbet et...',
@@ -362,66 +366,64 @@ export default function HomePage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-    <div
-      className="w-full bg-white dark:bg-gray-900"
-      style={{
-        height: 'calc(100vh - 64px)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-
-      {/* ── Üst bar ─────────────────────────────────────────────────────────── */}
+      {/* Üst bar */}
       <div
-        style={{ flexShrink: 0 }}
-        className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: TOP_BAR_HEIGHT,
+          zIndex: 40,
+        }}
+        className="flex items-center justify-between px-4 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-semibold text-base text-gray-900 dark:text-gray-100">
-              {getGreeting()}{userName ? `, ${userName}` : ''} 👋
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400 capitalize mt-0.5">{todayDate}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowWeeklySummary(true)}
-              className="relative w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-              aria-label="Bu haftanı gör"
-              title="Bu haftanı gör"
-            >
-              <BarChart2 size={20} />
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/notifications')}
-              className="relative w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-              aria-label="Bildirimler"
-            >
-              <Bell size={20} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-          </div>
+        <div>
+          <h1 className="font-semibold text-gray-800 dark:text-gray-100">
+            {getGreeting()}{userName ? `, ${userName}` : ''} 👋
+          </h1>
+          <p className="text-xs text-gray-400 capitalize">{todayDate}</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowWeeklySummary(true)}
+            className="relative w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+            aria-label="Bu haftanı gör"
+            title="Bu haftanı gör"
+          >
+            <BarChart2 size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/notifications')}
+            className="relative w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+            aria-label="Bildirimler"
+          >
+            <Bell size={20} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* ── Mesajlar ─────────────────────────────────────────────────────────── */}
+      {/* Mesajlar */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="px-4 py-3 bg-white dark:bg-gray-900"
         style={{
-          flex: 1,
-          minHeight: 0,
+          position: 'fixed',
+          top: TOP_BAR_HEIGHT,
+          left: 0,
+          right: 0,
+          bottom: BOTTOM_NAV_HEIGHT + INPUT_ROW_HEIGHT,
           overflowY: 'auto',
           overscrollBehavior: 'contain',
         }}
+        className="px-4 py-3 bg-white dark:bg-gray-900"
       >
         {isLoadingMore && (
           <div className="text-center text-gray-400 text-xs py-2">Yükleniyor...</div>
@@ -473,9 +475,15 @@ export default function HomePage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── Input ───────────────────────────────────────────────────────────── */}
+      {/* Input */}
       <div
-        style={{ flexShrink: 0 }}
+        style={{
+          position: 'fixed',
+          bottom: BOTTOM_NAV_HEIGHT,
+          left: 0,
+          right: 0,
+          zIndex: 40,
+        }}
         className="bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700"
       >
         <div className="flex items-center gap-2 px-4 py-2">
@@ -488,37 +496,35 @@ export default function HomePage() {
             <Plus size={20} className="text-gray-600 dark:text-gray-300" />
           </button>
 
-          <div className="flex-1 relative min-w-0">
-            <textarea
-              ref={inputRef}
-              value={inputText}
-              onChange={e => {
-                setInputText(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={placeholders[placeholderIndex]}
-              rows={1}
-              className="w-full resize-none rounded-3xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:bg-white dark:focus:bg-gray-700 transition-colors"
-              style={{ minHeight: '42px', maxHeight: '120px' }}
-            />
-          </div>
+          <textarea
+            ref={inputRef}
+            value={inputText}
+            onChange={e => {
+              setInputText(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder={placeholders[placeholderIndex]}
+            rows={1}
+            className="flex-1 min-w-0 resize-none rounded-3xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:bg-white dark:focus:bg-gray-700 transition-colors"
+            style={{ minHeight: '42px', maxHeight: '120px' }}
+          />
 
           {inputText.trim() ? (
             <button
               type="button"
               onClick={handleSend}
               disabled={isChatLoading}
-              className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 disabled:opacity-50 active:scale-95 transition-transform"
+              className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 text-white disabled:opacity-50 active:scale-95 transition-transform"
               aria-label="Gönder"
             >
-              <Send size={18} className="text-white" />
+              <Send size={18} />
             </button>
           ) : (
             <button
@@ -539,24 +545,23 @@ export default function HomePage() {
           )}
         </div>
       </div>
-    </div>
 
-    <WeeklySummaryPage
-      isOpen={showWeeklySummary}
-      onClose={() => setShowWeeklySummary(false)}
-    />
+      <WeeklySummaryPage
+        isOpen={showWeeklySummary}
+        onClose={() => setShowWeeklySummary(false)}
+      />
 
-    {isRecording && (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50">
-        <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 shadow-xl mx-8">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
-            <div className="w-5 h-5 rounded-full bg-red-500" />
+      {isRecording && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 shadow-xl mx-8">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
+              <div className="w-5 h-5 rounded-full bg-red-500" />
+            </div>
+            <p className="text-sm font-semibold text-gray-800">Dinliyorum...</p>
+            <p className="text-xs text-gray-400">Konuşmayı bitirmek için bırakın</p>
           </div>
-          <p className="text-sm font-semibold text-gray-800">Dinliyorum...</p>
-          <p className="text-xs text-gray-400">Konuşmayı bitirmek için bırakın</p>
         </div>
-      </div>
-    )}
+      )}
     </>
   );
 }
