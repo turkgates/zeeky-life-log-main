@@ -333,11 +333,14 @@ export default function HomePage() {
     setIsRecording(false);
   };
 
+  const isMultiLine =
+    inputText.split('\n').length > 1 || inputText.length > 40;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
-      className="flex flex-col bg-white max-w-[430px] mx-auto"
-      style={{ height: 'calc(100dvh - 64px)' }}
+      className="flex flex-col h-screen min-h-0 bg-white max-w-[430px] mx-auto"
+      style={{ height: '100dvh' }}
     >
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
@@ -382,7 +385,7 @@ export default function HomePage() {
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-3"
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3"
         style={{ overscrollBehavior: 'contain' }}
       >
         {isLoadingMore && (
@@ -435,21 +438,25 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* ── Bottom input area ───────────────────────────────────────────────── */}
+      {/* ── Bottom input area (above fixed BottomNav) ─────────────────────────── */}
       <div
-        className="flex items-end gap-2 px-4 py-3 border-t border-gray-100 bg-white flex-none"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
+        className={`flex gap-2 px-4 py-3 border-t border-gray-100 bg-white flex-none ${
+          isMultiLine ? 'items-end' : 'items-center'
+        }`}
+        style={{
+          paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+        }}
       >
         <button
           type="button"
           onClick={() => navigate('/add')}
-          className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 flex-shrink-0 mb-1"
+          className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 flex-shrink-0"
           aria-label="Ekle"
         >
           <Plus size={20} />
         </button>
 
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-w-0">
           <textarea
             ref={textareaRef}
             value={inputText}
@@ -477,7 +484,7 @@ export default function HomePage() {
             type="button"
             onClick={handleSend}
             disabled={isChatLoading}
-            className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white disabled:opacity-50 flex-shrink-0 mb-1"
+            className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white disabled:opacity-50 flex-shrink-0"
             aria-label="Gönder"
           >
             <Send size={18} />
@@ -489,7 +496,7 @@ export default function HomePage() {
             onMouseUp={stopRecording}
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
-            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mb-1 ${
+            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
               isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-600'
             }`}
             aria-label="Sesli giriş"
