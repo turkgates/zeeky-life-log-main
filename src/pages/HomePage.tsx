@@ -67,6 +67,9 @@ export default function HomePage() {
   const [isRecording,      setIsRecording]      = useState(false);
   const [showWeeklySummary, setShowWeeklySummary] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 0,
+  );
 
   const recognitionRef       = useRef<any>(null);
   const messagesEndRef       = useRef<HTMLDivElement>(null);
@@ -97,6 +100,14 @@ export default function HomePage() {
       setPlaceholderIndex(prev => (prev + 1) % placeholders.length);
     }, 3000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      setViewportHeight(window.innerHeight);
+    };
+    window.addEventListener('resize', updateHeight);
+    return () => window.removeEventListener('resize', updateHeight);
   }, []);
 
   // ── Load user name (metadata first, then users table) ─────────────────────
@@ -201,20 +212,11 @@ export default function HomePage() {
     if (!isLoaded) return;
     const container = messagesContainerRef.current;
     if (!container) return;
-    requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
-    });
-  }, [isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
     if (loadingOlderRef.current) return;
-    const container = messagesContainerRef.current;
-    if (!container) return;
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
     });
-  }, [messages.length, isLoaded]);
+  }, [isLoaded, viewportHeight, messages.length]);
 
   // Pull older messages when scrolled to top
   const handleScroll = useCallback(() => {
@@ -336,7 +338,12 @@ export default function HomePage() {
     <>
     <div
       className="flex flex-col bg-white dark:bg-gray-900 max-w-[430px] mx-auto"
-      style={{ height: 'calc(100svh - 64px)' }}
+      style={{
+        height:
+          viewportHeight > 0
+            ? `${viewportHeight - 64}px`
+            : 'calc(100svh - 64px)',
+      }}
     >
 
       {/* ── Üst bar ─────────────────────────────────────────────────────────── */}
@@ -438,41 +445,43 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => navigate('/add')}
-            className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0"
+            className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
             aria-label="Ekle"
           >
             <Plus size={20} className="text-gray-600 dark:text-gray-300" />
           </button>
 
-          <textarea
-            ref={inputRef}
-            value={inputText}
-            onChange={e => {
-              setInputText(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder={placeholders[placeholderIndex]}
-            rows={1}
-            className="flex-1 min-w-0 resize-none rounded-3xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-blue-400"
-            style={{ minHeight: '40px', maxHeight: '120px' }}
-          />
+          <div className="flex-1 relative min-w-0">
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={e => {
+                setInputText(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={placeholders[placeholderIndex]}
+              rows={1}
+              className="w-full resize-none rounded-3xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:bg-white dark:focus:bg-gray-700 transition-colors"
+              style={{ minHeight: '42px', maxHeight: '120px' }}
+            />
+          </div>
 
           {inputText.trim() ? (
             <button
               type="button"
               onClick={handleSend}
               disabled={isChatLoading}
-              className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white flex-shrink-0 disabled:opacity-50"
+              className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 disabled:opacity-50 active:scale-95 transition-transform"
               aria-label="Gönder"
             >
-              <Send size={18} />
+              <Send size={18} className="text-white" />
             </button>
           ) : (
             <button
@@ -481,8 +490,10 @@ export default function HomePage() {
               onMouseUp={stopRecording}
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
-              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform ${
+                isRecording
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : 'bg-gray-100 dark:bg-gray-700'
               }`}
               aria-label="Sesli giriş"
             >
