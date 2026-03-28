@@ -18,6 +18,7 @@ import FriendsPage from "./pages/FriendsPage";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
+import OnboardingPage from "./pages/OnboardingPage";
 import NotFound from "./pages/NotFound";
 import { getUserCurrency, supabase } from "@/lib/supabase";
 import { useCurrencyStore } from "@/store/useCurrencyStore";
@@ -35,6 +36,28 @@ function CurrencyLoader() {
   return null;
 }
 
+function OnboardingGuard() {
+  const navigate = useNavigate();
+  const user = useAuthStore(s => s.user);
+
+  useEffect(() => {
+    if (!user) return;
+    const check = async () => {
+      const { data } = await supabase
+        .from('users')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single();
+      if (data && !data.onboarding_completed) {
+        navigate('/onboarding', { replace: true });
+      }
+    };
+    void check();
+  }, [user, navigate]);
+
+  return null;
+}
+
 function AppRoutes() {
   const initialize = useAuthStore(s => s.initialize);
   useEffect(() => {
@@ -44,12 +67,14 @@ function AppRoutes() {
   return (
     <>
       <CurrencyLoader />
+      <OnboardingGuard />
       <div className="min-h-screen flex flex-col bg-background w-full">
         <div className="flex-1 flex flex-col w-full">
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
             <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
             <Route path="/add" element={<ProtectedRoute><AddActionPage /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />

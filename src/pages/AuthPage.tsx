@@ -71,6 +71,7 @@ export default function AuthPage() {
     }
     setRegisterSuccess(true);
     setTab('login');
+    navigate('/onboarding');
   };
 
   const handleForgot = async (e: React.FormEvent) => {

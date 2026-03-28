@@ -21,6 +21,7 @@ export default function BottomNav() {
     || location.pathname === '/auth'
     || location.pathname === '/auth/callback'
     || location.pathname === '/reset-password'
+    || location.pathname === '/onboarding'
   ) return null;
 
   return (
