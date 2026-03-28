@@ -235,11 +235,14 @@ export default function HomePage() {
 
   useEffect(() => {
     const handleResize = () => {
-      window.setTimeout(() => scrollToBottom(false), 100);
+      window.setTimeout(() => {
+        const el = messagesContainerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 100);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [scrollToBottom]);
+  }, []);
 
   // Pull older messages when scrolled to top
   const handleScroll = useCallback(() => {
@@ -360,12 +363,20 @@ export default function HomePage() {
   return (
     <>
     <div
-      className="flex flex-col w-full bg-white dark:bg-gray-900"
-      style={{ height: 'calc(100vh - 64px)' }}
+      className="w-full bg-white dark:bg-gray-900"
+      style={{
+        height: 'calc(100vh - 64px)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
     >
 
       {/* ── Üst bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex-none px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900">
+      <div
+        style={{ flexShrink: 0 }}
+        className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900"
+      >
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-semibold text-base text-gray-900 dark:text-gray-100">
@@ -400,12 +411,17 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Mesajlar + scroll sonu (h-4) ────────────────────────────────────── */}
+      {/* ── Mesajlar ─────────────────────────────────────────────────────────── */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-3"
-        style={{ overscrollBehavior: 'contain' }}
+        className="px-4 py-3 bg-white dark:bg-gray-900"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+        }}
       >
         {isLoadingMore && (
           <div className="text-center text-gray-400 text-xs py-2">Yükleniyor...</div>
@@ -458,7 +474,10 @@ export default function HomePage() {
       </div>
 
       {/* ── Input ───────────────────────────────────────────────────────────── */}
-      <div className="flex-none sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
+      <div
+        style={{ flexShrink: 0 }}
+        className="bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700"
+      >
         <div className="flex items-center gap-2 px-4 py-2">
           <button
             type="button"

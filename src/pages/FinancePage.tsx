@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Plus, Filter, Sparkles, ArrowRight, RefreshCw, ChevronLeft, ChevronRight, X, Loader2, Search } from 'lucide-react';
 import { HighlightMatch } from '@/components/HighlightMatch';
@@ -87,7 +87,6 @@ export default function FinancePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Transaction[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const transactionsRef = useRef<HTMLDivElement>(null);
 
   // ── Load transactions ────────────────────────────────────────────────────
   const loadTransactions = useCallback(async () => {
@@ -366,18 +365,6 @@ export default function FinancePage() {
 
   const activeFilterCount = getActiveFilterCount(filters);
 
-  useEffect(() => {
-    if (showSearch && transactionsRef.current) {
-      const t = window.setTimeout(() => {
-        transactionsRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        });
-      }, 100);
-      return () => window.clearTimeout(t);
-    }
-  }, [showSearch]);
-
   return (
     <div className="pb-24 w-full animate-fade-in">
 
@@ -568,7 +555,7 @@ export default function FinancePage() {
       )}
 
       {/* ── Transactions list ───────────────────────────────────────────── */}
-      <div ref={transactionsRef} className="mx-4">
+      <div className="mx-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold">İşlemler</h2>
           {!searchActive && (
