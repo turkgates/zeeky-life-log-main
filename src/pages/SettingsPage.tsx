@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sun, Moon, Bell, Globe, Info, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Globe, Info, Loader2 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -9,13 +9,66 @@ import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { toast } from 'sonner';
 
-function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+const DEFAULT_NOTIFICATION_SETTINGS = {
+  weekly_summary: true,
+  budget_alerts: true,
+  sport_reminders: true,
+  social_reminders: true,
+  payment_reminders: true,
+} as const;
+
+type NotificationSettings = typeof DEFAULT_NOTIFICATION_SETTINGS;
+
+function mergeNotificationSettings(raw: unknown): NotificationSettings {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_NOTIFICATION_SETTINGS };
+  }
+  const o = raw as Record<string, unknown>;
+  return {
+    weekly_summary: o.weekly_summary !== false,
+    budget_alerts: o.budget_alerts !== false,
+    sport_reminders: o.sport_reminders !== false,
+    social_reminders: o.social_reminders !== false,
+    payment_reminders: o.payment_reminders !== false,
+  };
+}
+
+function Toggle({
+  on,
+  onToggle,
+  value,
+  onChange,
+  disabled,
+}: {
+  on?: boolean;
+  onToggle?: () => void;
+  value?: boolean;
+  onChange?: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  const isOn = value !== undefined ? value : on ?? false;
+  const handle = () => {
+    if (disabled) return;
+    if (onChange) onChange(!isOn);
+    else onToggle?.();
+  };
   return (
     <button
-      onClick={onToggle}
-      className={cn('w-12 h-7 rounded-full transition-colors relative', on ? 'bg-primary' : 'bg-muted')}
+      type="button"
+      disabled={disabled}
+      onClick={handle}
+      className={cn(
+        'w-12 h-7 rounded-full transition-colors relative shrink-0',
+        disabled && 'opacity-50 cursor-not-allowed',
+        isOn ? 'bg-primary' : 'bg-muted',
+      )}
     >
-      <div className={cn('w-5 h-5 rounded-full bg-card absolute top-1 transition-transform shadow-sm', on ? 'translate-x-6' : 'translate-x-1')} />
+      <div
+        className={cn(
+          'w-5 h-5 rounded-full bg-card absolute top-1 transition-transform shadow-sm',
+          isOn ? 'translate-x-6' : 'translate-x-1',
+        )}
+      />
     </button>
   );
 }
@@ -25,9 +78,10 @@ export default function SettingsPage() {
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
   const { theme, toggle } = useTheme();
-  const [notifAll, setNotifAll] = useState(true);
-  const [notifReminder, setNotifReminder] = useState(true);
-  const [notifSuggestion, setNotifSuggestion] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => ({
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+  }));
   const [lang, setLang] = useState<'tr' | 'en'>('tr');
 
   const setGlobalCurrency = useCurrencyStore(s => s.setCurrency);
@@ -51,7 +105,11 @@ export default function SettingsPage() {
       try {
         const [u, p] = await Promise.all([
           supabase.from('users').select('currency, currency_symbol').eq('id', userId).single(),
-          supabase.from('user_profiles').select('ai_personality').eq('user_id', userId).single(),
+          supabase
+            .from('user_profiles')
+            .select('ai_personality, notification_enabled, notification_settings')
+            .eq('user_id', userId)
+            .single(),
         ]);
         if (u.data?.currency) {
           const sym = u.data.currency_symbol || getCurrencySymbol(u.data.currency);
@@ -59,6 +117,10 @@ export default function SettingsPage() {
         }
         if (p.data?.ai_personality === 'strict' || p.data?.ai_personality === 'gentle' || p.data?.ai_personality === 'balanced') {
           setAiPersonality(p.data.ai_personality);
+        }
+        if (p.data) {
+          setNotificationsEnabled(p.data.notification_enabled ?? true);
+          setNotificationSettings(mergeNotificationSettings(p.data.notification_settings));
         }
       } finally {
         setPrefsLoading(false);
@@ -99,6 +161,33 @@ export default function SettingsPage() {
       return;
     }
     toast.success('Zeeky kişiliği güncellendi');
+  };
+
+  const handleNotificationToggle = async (value: boolean) => {
+    if (!userId) return;
+    setNotificationsEnabled(value);
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ notification_enabled: value })
+      .eq('user_id', userId);
+    if (error) {
+      console.error(error);
+      toast.error('Bildirim ayarı kaydedilemedi');
+    }
+  };
+
+  const handleCategoryToggle = async (key: keyof NotificationSettings, value: boolean) => {
+    if (!userId) return;
+    const next = { ...notificationSettings, [key]: value };
+    setNotificationSettings(next);
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ notification_settings: next })
+      .eq('user_id', userId);
+    if (error) {
+      console.error(error);
+      toast.error('Bildirim tercihi kaydedilemedi');
+    }
   };
 
   const handlePasswordChange = async () => {
@@ -299,40 +388,46 @@ export default function SettingsPage() {
         </div>
 
         {/* Notifications */}
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-3 p-4 border-b border-border">
-            <Bell className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium">Bildirimler</span>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Tüm Bildirimler</span>
-              <Toggle on={notifAll} onToggle={() => setNotifAll(!notifAll)} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Hatırlatmalar</span>
-              <Toggle on={notifReminder} onToggle={() => setNotifReminder(!notifReminder)} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Tavsiye Bildirimleri</span>
-              <Toggle on={notifSuggestion} onToggle={() => setNotifSuggestion(!notifSuggestion)} />
-            </div>
-          </div>
-        </div>
-
-        {/* Routine Actions */}
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <span className="text-sm font-medium">Rutin Eylemler</span>
-          </div>
-          <div className="p-4 space-y-2">
-            {['Sabah sporu', 'Kahve molası', 'Akşam yürüyüşü'].map(item => (
-              <div key={item} className="flex items-center justify-between bg-muted rounded-xl px-3 py-2.5">
-                <span className="text-sm">{item}</span>
-                <Trash2 className="w-4 h-4 text-destructive" />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm dark:bg-card dark:border-border">
+          <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-border">
+            <div className="flex items-center gap-3">
+              <span>🔔</span>
+              <div>
+                <p className="font-medium text-sm text-gray-900 dark:text-foreground">Bildirimler</p>
+                <p className="text-xs text-gray-400 dark:text-muted-foreground">Tüm bildirimleri aç/kapat</p>
               </div>
-            ))}
+            </div>
+            <Toggle
+              value={notificationsEnabled}
+              onChange={v => void handleNotificationToggle(v)}
+              disabled={!userId || prefsLoading}
+            />
           </div>
+          {([
+            { key: 'weekly_summary' as const, label: 'Haftalık özet', icon: '📊' },
+            { key: 'budget_alerts' as const, label: 'Bütçe uyarıları', icon: '💰' },
+            { key: 'sport_reminders' as const, label: 'Spor hatırlatmaları', icon: '🏃' },
+            { key: 'social_reminders' as const, label: 'Sosyal hatırlatmalar', icon: '👥' },
+            { key: 'payment_reminders' as const, label: 'Ödeme hatırlatmaları', icon: '📅' },
+          ]).map(item => (
+            <div
+              key={item.key}
+              className={cn(
+                'flex items-center justify-between px-4 py-3 border-b border-gray-100 last:border-0 dark:border-border',
+                !notificationsEnabled && 'opacity-40',
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span>{item.icon}</span>
+                <p className="text-sm text-gray-700 dark:text-foreground/90">{item.label}</p>
+              </div>
+              <Toggle
+                value={notificationSettings[item.key] ?? true}
+                onChange={v => void handleCategoryToggle(item.key, v)}
+                disabled={!notificationsEnabled || !userId || prefsLoading}
+              />
+            </div>
+          ))}
         </div>
 
         {/* Language */}

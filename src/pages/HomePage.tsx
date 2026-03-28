@@ -24,9 +24,9 @@ export default function HomePage() {
   const userId = user?.id ?? '';
 
   const {
-    messages, isLoaded, offset, hasMore,
+    messages, isLoaded, offset, hasMore, scrollPosition,
     setMessages, prependMessages, addMessage,
-    setLoaded, setOffset, setHasMore,
+    setLoaded, setOffset, setHasMore, setScrollPosition,
   } = useChatStore();
 
   const { unreadCount, setUnreadCount } = useNotificationStore();
@@ -44,6 +44,7 @@ export default function HomePage() {
   const messagesEndRef       = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef          = useRef<HTMLTextAreaElement>(null);
+  const smoothScrollPrevRef  = useRef<{ len: number; firstId?: string }>({ len: 0 });
 
   const todayDate = new Date().toLocaleDateString('tr-TR', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -139,18 +140,48 @@ export default function HomePage() {
     void loadHistory(0, false).finally(() => setIsLoadingHistory(false));
   }, [isLoaded, loadHistory]);
 
-  // Instant scroll to bottom after initial load
+  // Sayfadan ayrılırken kaydırma pozisyonunu sakla
   useEffect(() => {
-    if (isLoaded && messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
-    }
-  }, [isLoaded]);
+    return () => {
+      const container = messagesContainerRef.current;
+      if (container) {
+        setScrollPosition(container.scrollTop);
+      }
+    };
+  }, [setScrollPosition]);
 
-  // Smooth scroll on new messages
+  // Geçmiş yüklendiğinde veya dönüşte: animasyonsuz konum (kayıtlı veya en alta)
   useEffect(() => {
     if (!isLoaded) return;
+    if (messages.length === 0) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (scrollPosition > 0) {
+      container.scrollTop = scrollPosition;
+    } else {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [isLoaded, scrollPosition]);
+
+  // Sadece sondan yeni mesaj (prepend / ilk yükleme değil) gelince yumuşak kaydır
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (messages.length === 0) return;
+
+    const firstId = messages[0]?.id;
+    const prev = smoothScrollPrevRef.current;
+    const isPrepend =
+      messages.length > prev.len && firstId !== prev.firstId && prev.len > 0;
+    const isInitialBatch = prev.len === 0 && messages.length > 0;
+
+    smoothScrollPrevRef.current = { len: messages.length, firstId };
+
+    if (isInitialBatch || isPrepend) return;
+
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, isLoaded]);
+  }, [messages.length, isLoaded, messages]);
 
   // Pull older messages when scrolled to top
   const handleScroll = useCallback(() => {
@@ -388,22 +419,6 @@ export default function HomePage() {
         className="flex-none px-4 pt-2 pb-3 border-t border-gray-100 bg-white"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
       >
-        {/* Quick action chips */}
-        <div className="flex gap-2 mb-2">
-          <button
-            onClick={() => navigate('/add')}
-            className="text-xs px-3 py-1.5 rounded-full border border-blue-200 text-blue-600 bg-blue-50 active:scale-95 transition-transform"
-          >
-            + Aktivite ekle
-          </button>
-          <button
-            onClick={() => navigate('/history')}
-            className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 bg-gray-50 active:scale-95 transition-transform"
-          >
-            📊 İstatistiklerimi gör
-          </button>
-        </div>
-
         {/* Textarea + send */}
         <div className="flex items-end gap-2">
           <textarea

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Filter, Sparkles, ArrowRight, RefreshCw, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
+import { Plus, Filter, Sparkles, ArrowRight, RefreshCw, ChevronLeft, ChevronRight, X, Loader2, Search } from 'lucide-react';
+import { HighlightMatch } from '@/components/HighlightMatch';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/lib/utils';
@@ -27,6 +28,7 @@ import {
   addTransaction,
   deleteTransaction,
   MONTH_SHORT,
+  mapRow,
 } from '@/lib/transactionSupabase';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -78,6 +80,11 @@ export default function FinancePage() {
   const [filters, setFilters] = useState<TransactionFilters>({
     type: 'all', categories: [], dateRange: 'all', minAmount: '', maxAmount: '', recurring: 'all', sort: 'newest',
   });
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Transaction[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const transactionsRef = useRef<HTMLDivElement>(null);
 
   // ── Load transactions ────────────────────────────────────────────────────
   const loadTransactions = useCallback(async () => {
@@ -263,10 +270,51 @@ export default function FinancePage() {
     return list;
   }, [transactions, filters]);
 
+  const searchActive = searchQuery.length >= 2;
+
+  const searchTransactions = useCallback(async (q: string) => {
+    if (!userId || q.length < 2) return;
+    setSearchLoading(true);
+    try {
+      const pattern = `%${q}%`;
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .or(`title.ilike.${pattern},category.ilike.${pattern}`)
+        .order('transaction_date', { ascending: false })
+        .limit(20);
+      if (error) {
+        console.error('searchTransactions:', error);
+        setSearchResults([]);
+        return;
+      }
+      setSearchResults((data || []).map(r => mapRow(r as Record<string, unknown>)));
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    void searchTransactions(searchQuery);
+  }, [searchQuery, searchTransactions]);
+
+  const closeSearch = () => {
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const listForGroup = searchActive ? searchResults : filteredTx;
+
   // Group by date — newest day first; within each day, newest transaction first
   const grouped = useMemo(() => {
     const g: Record<string, Transaction[]> = {};
-    filteredTx.forEach(t => {
+    listForGroup.forEach(t => {
       const label = humanDate(t.date);
       if (!g[label]) g[label] = [];
       g[label].push(t);
@@ -287,7 +335,7 @@ export default function FinancePage() {
         return [label, txs] as [string, Transaction[]];
       });
     return rows;
-  }, [filteredTx, filters.sort]);
+  }, [listForGroup, filters.sort]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const getCatInfo = (tx: Transaction) => categories.find(c => c.name === tx.category);
@@ -304,21 +352,74 @@ export default function FinancePage() {
   const handleDeleteTx = async (id: string) => {
     if (!userId) return;
     const ok = await deleteTransaction(userId, id);
-    if (ok) { toast.success('İşlem silindi'); void loadTransactions(); }
+    if (ok) {
+      toast.success('İşlem silindi');
+      void loadTransactions();
+      if (searchQuery.length >= 2) void searchTransactions(searchQuery);
+    }
     setDeleteConfirm(null);
     setSwipedCardId(null);
   };
 
   const activeFilterCount = getActiveFilterCount(filters);
 
+  useEffect(() => {
+    if (showSearch && transactionsRef.current) {
+      const t = window.setTimeout(() => {
+        transactionsRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 100);
+      return () => window.clearTimeout(t);
+    }
+  }, [showSearch]);
+
   return (
     <div className="pb-24 max-w-[430px] mx-auto animate-fade-in">
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="px-4 pt-4 pb-2">
-        <h1 className="text-lg font-semibold">Gelir & Gider</h1>
+      {/* ── Header + search (sticky) ───────────────────────────────────── */}
+      <div className="sticky top-0 z-10 bg-background">
+        <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">Gelir & Gider</h1>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setShowSearch(s => !s)}
+              className="p-1.5 rounded-full active:bg-muted"
+              aria-label="Ara"
+            >
+              <Search size={22} className="text-gray-600 dark:text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        {showSearch && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-300 px-4 pb-3 pt-1">
+            <div className="relative">
+              <input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="İşlem veya kategori ara..."
+                className="w-full border border-gray-200 dark:border-border rounded-2xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:border-blue-400 bg-gray-50 dark:bg-muted"
+              />
+              <button
+                type="button"
+                onClick={closeSearch}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Aramayı kapat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {!searchActive && (
+      <>
       {/* ── Balance Card ───────────────────────────────────────────────── */}
       <div className="mx-4 bg-card rounded-2xl border border-border shadow-sm p-5 mb-4">
         {/* Month navigator */}
@@ -447,34 +548,50 @@ export default function FinancePage() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* ── Transactions list ───────────────────────────────────────────── */}
-      <div className="mx-4">
+      <div ref={transactionsRef} className="mx-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold">İşlemler</h2>
-          <button
-            onClick={() => setShowFilters(true)}
-            className="flex items-center gap-1 text-xs text-muted-foreground active:text-foreground"
-          >
-            <Filter className="w-4 h-4" />
-            {activeFilterCount > 0 && (
-              <span className="bg-accent text-accent-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
+          {!searchActive && (
+            <button
+              onClick={() => setShowFilters(true)}
+              className="flex items-center gap-1 text-xs text-muted-foreground active:text-foreground"
+            >
+              <Filter className="w-4 h-4" />
+              {activeFilterCount > 0 && (
+                <span className="bg-accent text-accent-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
-        {txLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-7 h-7 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredTx.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-4xl mb-3">💸</p>
-            <p className="text-sm text-muted-foreground">Bu ay için işlem yok</p>
-          </div>
-        ) : (
+        {searchActive && (
+          <p className="text-xs text-muted-foreground mb-2">
+            {searchLoading ? (
+              'Aranıyor…'
+            ) : (
+              <>
+                <span className="font-semibold text-foreground">{searchResults.length}</span> sonuç bulundu
+              </>
+            )}
+          </p>
+        )}
+
+        {searchActive ? (
+          searchLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-7 h-7 animate-spin text-muted-foreground" />
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-sm text-muted-foreground">Sonuç bulunamadı</p>
+            </div>
+          ) : (
           <div className="space-y-4">
             {grouped.map(([label, txs]) => (
               <div key={label}>
@@ -498,8 +615,13 @@ export default function FinancePage() {
                             {cat?.icon || '📦'}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{tx.title}</p>
-                            <p className="text-[10px] text-muted-foreground">{humanDate(tx.date)}</p>
+                            <p className="text-sm font-medium truncate">
+                              <HighlightMatch text={tx.title} query={searchQuery} />
+                            </p>
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              <HighlightMatch text={tx.category} query={searchQuery} />
+                              <span className="opacity-70"> · {humanDate(tx.date)}</span>
+                            </p>
                           </div>
                           {tx.frequency !== 'none' && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
                           <span className={cn(
@@ -516,10 +638,68 @@ export default function FinancePage() {
               </div>
             ))}
           </div>
+          )
+        ) : (
+          txLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-7 h-7 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredTx.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-4xl mb-3">💸</p>
+              <p className="text-sm text-muted-foreground">Bu ay için işlem yok</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {grouped.map(([label, txs]) => (
+                <div key={label}>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">{label}</p>
+                  <div className="space-y-2">
+                    {txs.map(tx => {
+                      const cat = getCatInfo(tx);
+                      return (
+                        <SwipeableCard
+                          key={tx.id}
+                          isOpen={swipedCardId === tx.id}
+                          onSwipeOpen={() => setSwipedCardId(prev => prev === tx.id ? null : tx.id)}
+                          onEdit={() => { setSwipedCardId(null); setSelectedTx(tx); }}
+                          onDelete={() => setDeleteConfirm(tx.id)}
+                        >
+                          <div className="flex items-center gap-3 p-3" onClick={() => setSelectedTx(tx)}>
+                            <div
+                              className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                              style={{ backgroundColor: (cat?.color || '#78909C') + '20' }}
+                            >
+                              {cat?.icon || '📦'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                <HighlightMatch text={tx.title} query={searchQuery} />
+                              </p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                <HighlightMatch text={tx.category} query={searchQuery} />
+                                <span className="opacity-70"> · {humanDate(tx.date)}</span>
+                              </p>
+                            </div>
+                            {tx.frequency !== 'none' && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+                            <span className={cn(
+                              "text-sm font-semibold flex-shrink-0",
+                              tx.type === 'income' ? "text-success" : "text-destructive"
+                            )}>
+                              {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString('tr-TR')} {currencySymbol}
+                            </span>
+                          </div>
+                        </SwipeableCard>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
 
-      {/* ── FAB ──────────────────────────────────────────────────────────── */}
       <button
         onClick={() => setShowAdd(true)}
         className="fixed bottom-24 z-50 w-14 h-14 rounded-full bg-accent text-accent-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform"
@@ -546,11 +726,19 @@ export default function FinancePage() {
           categories={categories}
           currencySymbol={currencySymbol}
           onClose={() => setSelectedTx(null)}
-          onSaved={() => { setSelectedTx(null); void loadTransactions(); }}
+          onSaved={() => {
+            setSelectedTx(null);
+            void loadTransactions();
+            if (searchQuery.length >= 2) void searchTransactions(searchQuery);
+          }}
           onDelete={async (id, opts) => {
             if (!userId) return false;
             const ok = await deleteTransaction(userId, id, opts);
-            if (ok) { toast.success('İşlem silindi'); void loadTransactions(); }
+            if (ok) {
+              toast.success('İşlem silindi');
+              void loadTransactions();
+              if (searchQuery.length >= 2) void searchTransactions(searchQuery);
+            }
             setSelectedTx(null);
           }}
         />

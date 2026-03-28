@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2 } from 'lucide-react';
+import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2, Search, X } from 'lucide-react';
+import { HighlightMatch } from '@/components/HighlightMatch';
 import CategoryIcon from '@/components/CategoryIcon';
 import SwipeableCard from '@/components/SwipeableCard';
 import ActivityDetailSheet from '@/components/ActivityDetailSheet';
@@ -11,6 +12,7 @@ import {
   fetchFavoriteActivities,
   deleteActivityById,
   FavoriteActivity,
+  mapRowToActivity,
 } from '@/lib/activitySupabase';
 import { supabase } from '@/lib/supabase';
 import { Activity } from '@/types/zeeky';
@@ -71,7 +73,50 @@ export default function HistoryPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
 
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Activity[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
   const weekDays = getWeekDays(currentWeekBase);
+
+  const isGlobalSearch = showSearch && searchQuery.length >= 2;
+
+  const searchAllActivities = useCallback(async (q: string) => {
+    if (!userId || q.length < 2) return;
+    setSearchLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('title', `%${q}%`)
+        .order('activity_date', { ascending: false })
+        .limit(20);
+      if (error) {
+        console.error('searchAllActivities:', error);
+        setSearchResults([]);
+        return;
+      }
+      setSearchResults((data || []).map(r => mapRowToActivity(r as Record<string, unknown>)));
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    void searchAllActivities(searchQuery);
+  }, [searchQuery, searchAllActivities]);
+
+  const closeSearch = () => {
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
 
   // Derive visible month from the first day of the displayed week
   const viewYear  = weekDays[0].getFullYear();
@@ -128,6 +173,7 @@ export default function HistoryPage() {
     if (ok) {
       void loadDayActivities(selectedDate);
       void loadDatesForMonth(viewYear, viewMonth);
+      if (searchQuery.length >= 2) void searchAllActivities(searchQuery);
     }
     setDeleteConfirm(null);
     setSwipedCardId(null);
@@ -234,6 +280,94 @@ export default function HistoryPage() {
   return (
     <div className="pb-24 max-w-[430px] mx-auto animate-fade-in">
 
+      {/* ── Title + search (sticky) ───────────────────────────────────── */}
+      <div className="sticky top-0 z-10 bg-background">
+        <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">Neler Yaptım</h1>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setShowSearch(s => !s)}
+              className="p-1.5 rounded-full active:bg-muted"
+              aria-label="Ara"
+            >
+              <Search size={22} className="text-gray-600 dark:text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        {showSearch && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-300 px-4 pb-3 pt-1">
+            <div className="relative">
+              <input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Aktivite ara..."
+                className="w-full border border-gray-200 dark:border-border rounded-2xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:border-blue-400 bg-gray-50 dark:bg-muted"
+              />
+              <button
+                type="button"
+                onClick={closeSearch}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Aramayı kapat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {isGlobalSearch ? (
+        <div className="px-4 mb-4">
+          <p className="text-xs text-muted-foreground py-2">
+            {searchLoading ? 'Aranıyor…' : `${searchResults.length} sonuç bulundu`}
+          </p>
+          {searchLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2">
+              <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+              <p className="text-xs text-muted-foreground">Aranıyor…</p>
+            </div>
+          ) : searchResults.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Sonuç bulunamadı</p>
+          ) : (
+            <div className="space-y-2">
+              {searchResults.map(a => {
+                const amount = a.details?.amount as number | undefined;
+                return (
+                  <SwipeableCard
+                    key={a.id}
+                    isOpen={swipedCardId === a.id}
+                    onSwipeOpen={() => setSwipedCardId(prev => prev === a.id ? null : a.id)}
+                    onEdit={() => { setSwipedCardId(null); navigate('/add', { state: { editId: a.id, category: a.category } }); }}
+                    onDelete={() => setDeleteConfirm(a.id)}
+                  >
+                    <div className="flex items-center gap-3 p-3" onClick={() => setSelectedActivity(a)}>
+                      <CategoryIcon category={a.category} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">{formatDateHeader(a.date)}</p>
+                        <p className="text-sm font-medium truncate">
+                          <HighlightMatch text={a.title} query={searchQuery} />
+                        </p>
+                        {amount != null && (
+                          <p className="text-xs font-medium text-foreground">
+                            {amount.toLocaleString('tr-TR')} {currencySymbol}
+                          </p>
+                        )}
+                        {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
+                      </div>
+                      <span className="text-xs text-muted-foreground tabular-nums">{a.time}</span>
+                    </div>
+                  </SwipeableCard>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       {/* ── Calendar Strip ─────────────────────────────────────────────── */}
       <div className="px-4 pt-4 mb-3">
         <div className="flex items-center justify-between mb-2">
@@ -354,6 +488,9 @@ export default function HistoryPage() {
         )}
       </div>
 
+        </>
+      )}
+
       {/* ── Delete Confirmation ────────────────────────────────────────── */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => setDeleteConfirm(null)}>
@@ -376,6 +513,7 @@ export default function HistoryPage() {
             await deleteActivityById(userId, id);
             void loadDayActivities(selectedDate);
             void loadDatesForMonth(viewYear, viewMonth);
+            if (searchQuery.length >= 2) void searchAllActivities(searchQuery);
             setSelectedActivity(null);
           }}
         />

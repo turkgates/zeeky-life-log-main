@@ -41,7 +41,7 @@ export interface ChartBar {
 
 // ── Row mapper ───────────────────────────────────────────────────────────────
 
-function mapRow(row: Record<string, unknown>): Transaction {
+export function mapRow(row: Record<string, unknown>): Transaction {
   const d = new Date(row.transaction_date as string);
   return {
     id:                     row.id as string,

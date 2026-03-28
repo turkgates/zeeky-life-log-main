@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Filter, Check, X, Heart, Coins, Users, Activity, RefreshCw, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Filter, Check, X, Heart, Coins, Users, Activity, RefreshCw, Loader2, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { HighlightMatch } from '@/components/HighlightMatch';
 import { useAuthStore } from '@/store/useAuthStore';
 
 type CategoryKey = 'all' | 'sağlık' | 'sosyal' | 'finans' | 'alışkanlık';
@@ -81,8 +82,22 @@ export default function SuggestionsPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const filterActive = filterStatus !== 'all' || filterCategory !== 'all';
+
+  const filteredSuggestions = useMemo(() => {
+    if (searchQuery.length < 2) return suggestions;
+    const q = searchQuery.toLowerCase();
+    return suggestions.filter(s => s.content.toLowerCase().includes(q));
+  }, [suggestions, searchQuery]);
+
+  const searchActive = searchQuery.length >= 2;
+  const closeSearch = () => {
+    setShowSearch(false);
+    setSearchQuery('');
+  };
 
   const generateSuggestions = useCallback(async (mode: 'auto' | 'refresh' = 'auto') => {
     if (!userId) return;
@@ -205,31 +220,64 @@ export default function SuggestionsPage() {
   return (
     <div className="pb-24 max-w-[430px] mx-auto animate-fade-in relative">
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h1 className="text-lg font-semibold">Tavsiyeler</h1>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void refreshSuggestions()}
-            disabled={isGenerating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border text-xs font-medium text-muted-foreground active:scale-95 disabled:opacity-50"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5', isGenerating && 'animate-spin')} />
-            Yenile
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowFilterSheet(true)}
-            className="relative p-2 rounded-full active:bg-muted"
-            aria-label="Filtrele"
-          >
-            <Filter className="w-5 h-5 text-muted-foreground" />
-            {filterActive && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 border border-white" />
-            )}
-          </button>
+      {/* Header + search (sticky) */}
+      <div className="sticky top-0 z-10 bg-background px-4 pb-3">
+        <div className="flex items-center justify-between pt-4 pb-2">
+          <h1 className="text-lg font-semibold">Tavsiyeler</h1>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void refreshSuggestions()}
+              disabled={isGenerating}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border text-xs font-medium text-muted-foreground active:scale-95 disabled:opacity-50"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', isGenerating && 'animate-spin')} />
+              Yenile
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilterSheet(true)}
+              className="relative p-2 rounded-full active:bg-muted"
+              aria-label="Filtrele"
+            >
+              <Filter className="w-5 h-5 text-muted-foreground" />
+              {filterActive && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 border border-white" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSearch(s => !s)}
+              className="p-2 rounded-full active:bg-muted"
+              aria-label="Ara"
+            >
+              <Search className="w-5 h-5 text-gray-600 dark:text-muted-foreground" />
+            </button>
+          </div>
         </div>
+
+        {showSearch && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-300 px-4 pb-3">
+            <div className="relative">
+              <input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Tavsiye ara..."
+                className="w-full border border-gray-200 dark:border-border rounded-2xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:border-blue-400 bg-gray-50 dark:bg-muted"
+              />
+              <button
+                type="button"
+                onClick={closeSearch}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground"
+                aria-label="Aramayı kapat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -246,8 +294,18 @@ export default function SuggestionsPage() {
             <p className="text-4xl mb-3">💡</p>
             <p className="text-sm text-muted-foreground">Bu filtreye uygun tavsiye yok</p>
           </div>
+        ) : searchActive && filteredSuggestions.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-sm text-muted-foreground">Sonuç bulunamadı</p>
+          </div>
         ) : (
-          suggestions.map(s => {
+          <>
+            {searchActive && filteredSuggestions.length > 0 && (
+              <p className="text-xs text-muted-foreground -mt-1 mb-1">
+                <span className="font-semibold text-foreground">{filteredSuggestions.length}</span> sonuç bulundu
+              </p>
+            )}
+            {filteredSuggestions.map(s => {
             const Icon  = CATEGORY_ICONS[s.category] ?? Activity;
             const color = CATEGORY_COLORS[s.category] ?? '#8b5cf6';
             const isPending = s.status === 'pending';
@@ -268,7 +326,9 @@ export default function SuggestionsPage() {
                     <Icon size={20} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium leading-snug">{s.content}</p>
+                    <p className="text-sm font-medium leading-snug">
+                      <HighlightMatch text={s.content} query={searchQuery} />
+                    </p>
                     {s.reason && (
                       <p className="text-xs text-muted-foreground mt-1">{s.reason}</p>
                     )}
@@ -294,7 +354,8 @@ export default function SuggestionsPage() {
                 )}
               </div>
             );
-          })
+          })}
+          </>
         )}
       </div>
 
