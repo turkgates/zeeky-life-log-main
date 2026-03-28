@@ -28,15 +28,32 @@ function getGreeting() {
   return 'İyi akşamlar';
 }
 
+/** DB desc+limit ile gelen satırları kronolojik sıraya çevir (reverse yerine sort). */
+function mapConversationRows(
+  data: Array<{ role: unknown; content: unknown; created_at: unknown }>,
+) {
+  const sorted = [...data].sort(
+    (a, b) =>
+      new Date(String(a.created_at)).getTime() -
+      new Date(String(b.created_at)).getTime(),
+  );
+  return sorted.map((msg, i) => ({
+    id: `${String(msg.created_at)}-${i}-${String(msg.role)}`,
+    role: msg.role as 'user' | 'assistant',
+    content: String(msg.content ?? ''),
+    created_at: String(msg.created_at),
+  }));
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
 
   const {
-    messages, isLoaded, offset, hasMore, scrollPosition,
+    messages, isLoaded, hasMore,
     setMessages, prependMessages, addMessage,
-    setLoaded, setOffset, setHasMore, setScrollPosition,
+    setLoaded, setHasMore, setScrollPosition,
   } = useChatStore();
 
   const { unreadCount, setUnreadCount } = useNotificationStore();
@@ -50,14 +67,12 @@ export default function HomePage() {
   const [isRecording,      setIsRecording]      = useState(false);
   const [showWeeklySummary, setShowWeeklySummary] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const [placeholderVisible, setPlaceholderVisible] = useState(true);
 
   const recognitionRef       = useRef<any>(null);
   const messagesEndRef       = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const textareaRef          = useRef<HTMLTextAreaElement>(null);
-  const smoothScrollPrevRef  = useRef<{ len: number; firstId?: string }>({ len: 0 });
-  const placeholderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef             = useRef<HTMLTextAreaElement>(null);
+  const loadingOlderRef = useRef(false);
 
   const todayDate = new Date().toLocaleDateString('tr-TR', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -79,18 +94,9 @@ export default function HomePage() {
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setPlaceholderVisible(false);
-      if (placeholderTimeoutRef.current) clearTimeout(placeholderTimeoutRef.current);
-      placeholderTimeoutRef.current = window.setTimeout(() => {
-        placeholderTimeoutRef.current = null;
-        setPlaceholderIndex(prev => (prev + 1) % placeholders.length);
-        setPlaceholderVisible(true);
-      }, 300);
+      setPlaceholderIndex(prev => (prev + 1) % placeholders.length);
     }, 3000);
-    return () => {
-      window.clearInterval(interval);
-      if (placeholderTimeoutRef.current) clearTimeout(placeholderTimeoutRef.current);
-    };
+    return () => window.clearInterval(interval);
   }, []);
 
   // ── Load user name (metadata first, then users table) ─────────────────────
@@ -112,21 +118,35 @@ export default function HomePage() {
   }, [user, userId]);
 
   // ── Load chat history ─────────────────────────────────────────────────────
-  const loadHistory = useCallback(async (fetchOffset = 0, prepend = false) => {
+  // İlk yükleme: bugünün son 20 mesajı (desc+limit), sonra kronolojik sıra için sort.
+  // Daha eskiler: mevcut en eski tarihten öncekiler, prepend ile dizinin başına.
+  const loadHistory = useCallback(async (prepend = false) => {
     if (!userId) return;
     const today = new Date().toISOString().split('T')[0];
 
-    const { data, count } = await supabase
+    let q = supabase
       .from('conversations')
-      .select('role, content, created_at', { count: 'exact' })
+      .select('role, content, created_at')
       .eq('user_id', userId)
       .gte('created_at', `${today}T00:00:00.000Z`)
-      .lte('created_at', `${today}T23:59:59.999Z`)
-      .order('created_at', { ascending: false })
-      .range(fetchOffset, fetchOffset + 9);
+      .lte('created_at', `${today}T23:59:59.999Z`);
+
+    if (prepend) {
+      const oldest = useChatStore.getState().messages[0]?.created_at;
+      if (!oldest) return;
+      q = q.lt('created_at', oldest);
+    }
+
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(20);
+
+    if (error) {
+      console.error('loadHistory:', error);
+      setLoaded(true);
+      return;
+    }
 
     if (!data || data.length === 0) {
-      if (fetchOffset === 0) {
+      if (!prepend) {
         setMessages([{
           id: 'welcome',
           role: 'assistant',
@@ -139,34 +159,32 @@ export default function HomePage() {
       return;
     }
 
-    const sorted = [...data].reverse().map((msg, i) => ({
-      id: `${fetchOffset + i}-${msg.created_at as string}`,
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content as string,
-      created_at: msg.created_at as string,
-    }));
+    const rows = mapConversationRows(data);
 
     if (prepend) {
+      loadingOlderRef.current = true;
       const container = messagesContainerRef.current;
       const prevScrollHeight = container?.scrollHeight ?? 0;
-      prependMessages(sorted);
+      prependMessages(rows);
       requestAnimationFrame(() => {
-        if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
+        requestAnimationFrame(() => {
+          if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
+          loadingOlderRef.current = false;
+        });
       });
     } else {
-      setMessages(sorted);
+      setMessages(rows);
     }
 
-    setHasMore((count ?? 0) > fetchOffset + 10);
-    setOffset(fetchOffset + 10);
+    setHasMore(data.length === 20);
     setLoaded(true);
-  }, [setMessages, prependMessages, setHasMore, setOffset, setLoaded, userId]);
+  }, [setMessages, prependMessages, setHasMore, setLoaded, userId]);
 
   // Load on mount
   useEffect(() => {
     if (isLoaded) return;
     setIsLoadingHistory(true);
-    void loadHistory(0, false).finally(() => setIsLoadingHistory(false));
+    void loadHistory(false).finally(() => setIsLoadingHistory(false));
   }, [isLoaded, loadHistory]);
 
   // Sayfadan ayrılırken kaydırma pozisyonunu sakla
@@ -179,46 +197,32 @@ export default function HomePage() {
     };
   }, [setScrollPosition]);
 
-  // Geçmiş yüklendiğinde veya dönüşte: animasyonsuz konum (kayıtlı veya en alta)
   useEffect(() => {
     if (!isLoaded) return;
-    if (messages.length === 0) return;
-
     const container = messagesContainerRef.current;
     if (!container) return;
-
-    if (scrollPosition > 0) {
-      container.scrollTop = scrollPosition;
-    } else {
+    requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
-    }
-  }, [isLoaded, scrollPosition]);
+    });
+  }, [isLoaded]);
 
-  // Sadece sondan yeni mesaj (prepend / ilk yükleme değil) gelince yumuşak kaydır
   useEffect(() => {
     if (!isLoaded) return;
-    if (messages.length === 0) return;
-
-    const firstId = messages[0]?.id;
-    const prev = smoothScrollPrevRef.current;
-    const isPrepend =
-      messages.length > prev.len && firstId !== prev.firstId && prev.len > 0;
-    const isInitialBatch = prev.len === 0 && messages.length > 0;
-
-    smoothScrollPrevRef.current = { len: messages.length, firstId };
-
-    if (isInitialBatch || isPrepend) return;
-
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, isLoaded, messages]);
+    if (loadingOlderRef.current) return;
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+  }, [messages.length, isLoaded]);
 
   // Pull older messages when scrolled to top
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container || container.scrollTop !== 0 || !hasMore || isLoadingMore) return;
     setIsLoadingMore(true);
-    void loadHistory(offset, true).finally(() => setIsLoadingMore(false));
-  }, [hasMore, isLoadingMore, loadHistory, offset]);
+    void loadHistory(true).finally(() => setIsLoadingMore(false));
+  }, [hasMore, isLoadingMore, loadHistory]);
 
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (userMessage: string) => {
@@ -293,17 +297,11 @@ export default function HomePage() {
     if (!text || isChatLoading) return;
     setInputText('');
     // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
     }
     void sendMessage(text);
   }, [inputText, isChatLoading, sendMessage]);
-
-  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputText(e.target.value);
-    e.target.style.height = 'auto';
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-  };
 
   // ── Voice recording ───────────────────────────────────────────────────────
   const startRecording = () => {
@@ -316,9 +314,9 @@ export default function HomePage() {
     r.onresult = (e: any) => {
       const t = e.results[0][0].transcript as string;
       setInputText(prev => prev + t);
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
       }
     };
     r.onend = () => setIsRecording(false);
@@ -333,18 +331,20 @@ export default function HomePage() {
     setIsRecording(false);
   };
 
-  const isMultiLine =
-    inputText.split('\n').length > 1 || inputText.length > 40;
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <>
     <div
-      className="flex flex-col h-screen min-h-0 bg-white max-w-[430px] mx-auto"
-      style={{ height: '100dvh' }}
+      className="bg-white max-w-[430px] mx-auto"
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr auto',
+        height: 'calc(100dvh - 64px)',
+      }}
     >
 
-      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex-none px-4 py-3 border-b border-gray-100 bg-white">
+      {/* ── Üst bar (auto) ──────────────────────────────────────────────────── */}
+      <div className="px-4 py-3 border-b border-gray-100 bg-white">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-semibold text-gray-800 text-base">
@@ -381,11 +381,11 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Messages area ───────────────────────────────────────────────────── */}
+      {/* ── Mesajlar (1fr, scroll) + scroll sonu boşluğu (h-4) ───────────────── */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-3"
+        className="min-h-0 overflow-y-auto px-4 py-3"
         style={{ overscrollBehavior: 'contain' }}
       >
         {isLoadingMore && (
@@ -393,7 +393,7 @@ export default function HomePage() {
         )}
 
         {isLoadingHistory ? (
-          <div className="flex justify-center items-center h-full">
+          <div className="flex justify-center items-center min-h-[40%]">
             <span className="text-gray-400 text-sm">Yükleniyor...</span>
           </div>
         ) : (
@@ -418,7 +418,6 @@ export default function HomePage() {
               </div>
             ))}
 
-            {/* Typing indicator */}
             {isChatLoading && (
               <div className="flex justify-start mb-3">
                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0">
@@ -433,34 +432,35 @@ export default function HomePage() {
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </>
         )}
+
+        <div ref={messagesEndRef} className="h-4" />
       </div>
 
-      {/* ── Bottom input area (above fixed BottomNav) ─────────────────────────── */}
+      {/* ── Input (auto) — yükseklik calc(100dvh - 64px) ile BottomNav payı düşülmüş ─ */}
       <div
-        className={`flex gap-2 px-4 py-3 border-t border-gray-100 bg-white flex-none ${
-          isMultiLine ? 'items-end' : 'items-center'
-        }`}
-        style={{
-          paddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-        }}
+        className="bg-white border-t border-gray-100"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <button
-          type="button"
-          onClick={() => navigate('/add')}
-          className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 flex-shrink-0"
-          aria-label="Ekle"
-        >
-          <Plus size={20} />
-        </button>
+        <div className="flex items-center gap-2 px-4 py-2">
+          <button
+            type="button"
+            onClick={() => navigate('/add')}
+            className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0"
+            aria-label="Ekle"
+          >
+            <Plus size={20} className="text-gray-600" />
+          </button>
 
-        <div className="flex-1 relative min-w-0">
           <textarea
-            ref={textareaRef}
+            ref={inputRef}
             value={inputText}
-            onChange={handleTextareaChange}
+            onChange={e => {
+              setInputText(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+            }}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -469,60 +469,55 @@ export default function HomePage() {
             }}
             placeholder={placeholders[placeholderIndex]}
             rows={1}
-            className="w-full resize-none rounded-3xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition-all duration-200"
-            style={{
-              minHeight: '40px',
-              maxHeight: '120px',
-              transition: 'opacity 0.3s ease',
-              opacity: inputText.trim() ? 1 : (placeholderVisible ? 1 : 0.3),
-            }}
+            className="flex-1 min-w-0 resize-none rounded-3xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm focus:outline-none focus:border-blue-400"
+            style={{ minHeight: '40px', maxHeight: '120px' }}
           />
-        </div>
 
-        {inputText.trim() ? (
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={isChatLoading}
-            className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white disabled:opacity-50 flex-shrink-0"
-            aria-label="Gönder"
-          >
-            <Send size={18} />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-              isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-600'
-            }`}
-            aria-label="Sesli giriş"
-          >
-            <Mic size={20} />
-          </button>
-        )}
+          {inputText.trim() ? (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={isChatLoading}
+              className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white flex-shrink-0 disabled:opacity-50"
+              aria-label="Gönder"
+            >
+              <Send size={18} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-600'
+              }`}
+              aria-label="Sesli giriş"
+            >
+              <Mic size={20} className={isRecording ? 'text-white' : 'text-gray-600'} />
+            </button>
+          )}
+        </div>
       </div>
-
-      {/* ── Recording overlay ────────────────────────────────────────────────── */}
-      <WeeklySummaryPage
-        isOpen={showWeeklySummary}
-        onClose={() => setShowWeeklySummary(false)}
-      />
-
-      {isRecording && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 shadow-xl mx-8">
-            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
-              <div className="w-5 h-5 rounded-full bg-red-500" />
-            </div>
-            <p className="text-sm font-semibold text-gray-800">Dinliyorum...</p>
-            <p className="text-xs text-gray-400">Konuşmayı bitirmek için bırakın</p>
-          </div>
-        </div>
-      )}
     </div>
+
+    <WeeklySummaryPage
+      isOpen={showWeeklySummary}
+      onClose={() => setShowWeeklySummary(false)}
+    />
+
+    {isRecording && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50">
+        <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 shadow-xl mx-8">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
+            <div className="w-5 h-5 rounded-full bg-red-500" />
+          </div>
+          <p className="text-sm font-semibold text-gray-800">Dinliyorum...</p>
+          <p className="text-xs text-gray-400">Konuşmayı bitirmek için bırakın</p>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

@@ -141,21 +141,34 @@ export default function NotificationsPage() {
     }
   }, [userId]);
 
-  useEffect(() => {
-    const init = async () => {
-      setIsLoading(true);
-      if (!userId) {
-        setNotifications([]);
-        setUnreadCount(0);
-        setIsLoading(false);
-        return;
-      }
+  const checkAndGenerate = useCallback(async () => {
+    if (!userId) return;
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data: todayNotifs } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('user_id', userId)
+      .gte('created_at', `${today}T00:00:00.000Z`)
+      .limit(1);
+
+    if (!todayNotifs || todayNotifs.length === 0) {
       await generateNotifications();
-      await loadNotifications();
+    }
+
+    await loadNotifications();
+  }, [generateNotifications, loadNotifications, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      setNotifications([]);
+      setUnreadCount(0);
       setIsLoading(false);
-    };
-    void init();
-  }, [generateNotifications, loadNotifications, userId, setUnreadCount]);
+      return;
+    }
+    setIsLoading(true);
+    void checkAndGenerate().finally(() => setIsLoading(false));
+  }, [userId, checkAndGenerate, setUnreadCount]);
 
   const markAsRead = async (id: string) => {
     const n = notifications.find(x => x.id === id);

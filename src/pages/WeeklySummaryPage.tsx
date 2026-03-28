@@ -24,18 +24,6 @@ interface Props {
   onClose: () => void;
 }
 
-function getWeekBounds() {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const daysToLastMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const thisMonday = new Date(today);
-  thisMonday.setDate(today.getDate() - daysToLastMonday);
-  thisMonday.setHours(0, 0, 0, 0);
-  const lastMonday = new Date(thisMonday);
-  lastMonday.setDate(thisMonday.getDate() - 7);
-  return { thisMonday, lastMonday };
-}
-
 export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
   const user = useAuthStore(s => s.user);
   const userId = user?.id ?? '';
@@ -52,9 +40,9 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-  const generateSummary = useCallback(async (showLoading = true) => {
+  const generateSummary = useCallback(async () => {
     if (!userId) return;
-    if (showLoading) setIsGenerating(true);
+    setIsGenerating(true);
     try {
       const response = await fetch(`${supabaseUrl}/functions/v1/zeeky-weekly-summary`, {
         method: 'POST',
@@ -72,19 +60,31 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
     }
   }, [supabaseUrl, supabaseAnonKey, userId]);
 
-  const loadSummary = useCallback(async () => {
+  const checkAndLoad = useCallback(async () => {
     if (!userId) return;
+    setIsGenerating(true);
     setIsLoading(true);
     setSummary(null);
 
-    const { lastMonday, thisMonday } = getWeekBounds();
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const thisMonday = new Date(now);
+    thisMonday.setDate(now.getDate() - daysToMonday);
+    thisMonday.setHours(0, 0, 0, 0);
+
+    const weekStart =
+      dayOfWeek === 0
+        ? new Date(thisMonday.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        : thisMonday.toISOString();
 
     const { data: existing, error } = await supabase
       .from('weekly_summaries')
-      .select('*')
+      .select('summary_data, generated_at')
       .eq('user_id', userId)
-      .gte('week_start', lastMonday.toISOString())
-      .lt('week_start', thisMonday.toISOString())
+      .gte('week_start', weekStart)
+      .order('week_start', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -95,19 +95,14 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
       setSummary(existing.summary_data as WeeklySummaryData);
       setIsGenerating(false);
       setIsLoading(false);
-
-      const rawGenerated = (existing as { generated_at?: string | null }).generated_at;
-      const lastUpdated = new Date(rawGenerated ?? 0);
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-
-      if (isNaN(lastUpdated.getTime()) || lastUpdated < oneHourAgo) {
-        void generateSummary(false);
-      }
       return;
     }
 
-    await generateSummary(true);
-    setIsLoading(false);
+    try {
+      await generateSummary();
+    } finally {
+      setIsLoading(false);
+    }
   }, [generateSummary, userId]);
 
   useEffect(() => {
@@ -117,10 +112,8 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
 
   useEffect(() => {
     if (!isOpen || !userId) return;
-    void loadSummary();
-    // Intentionally only re-run when modal opens or user changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, userId]);
+    void checkAndLoad();
+  }, [isOpen, userId, checkAndLoad]);
 
   const handleDragStart = (e: React.TouchEvent) => {
     dragStartY.current = e.touches[0].clientY;
@@ -137,7 +130,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
   };
 
   const handleRefresh = () => {
-    void generateSummary(true);
+    void generateSummary();
   };
 
   if (!isOpen) return null;
