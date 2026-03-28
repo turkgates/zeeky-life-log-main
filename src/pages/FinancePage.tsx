@@ -4,6 +4,7 @@ import { Plus, Filter, Sparkles, ArrowRight, RefreshCw, ChevronLeft, ChevronRigh
 import { HighlightMatch } from '@/components/HighlightMatch';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -59,6 +60,8 @@ export default function FinancePage() {
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
   const { symbol: currencySymbol, code: currencyCode } = useCurrencyStore();
+  const { theme } = useTheme();
+  const darkMode = theme === 'dark';
 
   const now = new Date();
   const [viewYear,  setViewYear]  = useState(now.getFullYear());
@@ -421,7 +424,7 @@ export default function FinancePage() {
       {!searchActive && (
       <>
       {/* ── Balance Card ───────────────────────────────────────────────── */}
-      <div className="mx-4 bg-card rounded-2xl border border-border shadow-sm p-5 mb-4">
+      <div className="mx-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 mb-4">
         {/* Month navigator */}
         <div className="flex items-center justify-between mb-3">
           <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full active:bg-muted">
@@ -436,15 +439,18 @@ export default function FinancePage() {
         {txLoading ? (
           <div className="h-8 w-32 bg-muted rounded-lg animate-pulse mb-3" />
         ) : (
-          <p className={cn("text-2xl font-bold mb-3", balance >= 0 ? "text-success" : "text-destructive")}>
+          <p className={cn(
+            "text-2xl font-bold mb-3",
+            balance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
+          )}>
             {balance >= 0 ? '+' : ''}{balance.toLocaleString('tr-TR')} {currencySymbol}
           </p>
         )}
         <div className="flex gap-2 flex-wrap">
-          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-success/10 text-success">
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-success/10 text-green-600 dark:text-green-400">
             Gelir: +{totalIncome.toLocaleString('tr-TR')} {currencySymbol}
           </span>
-          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-destructive/10 text-destructive">
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-destructive/10 text-red-600 dark:text-red-400">
             Gider: -{totalExpense.toLocaleString('tr-TR')} {currencySymbol}
           </span>
         </div>
@@ -499,7 +505,7 @@ export default function FinancePage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-2xl border border-border p-4 mb-3">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 mb-3">
           {chartLoading ? (
             <div className="h-[180px] flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -507,9 +513,19 @@ export default function FinancePage() {
           ) : (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={chartData}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={40}
-                  tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 11, fill: darkMode ? '#9ca3af' : '#6b7280' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: darkMode ? '#9ca3af' : '#6b7280' }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={40}
+                  tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                />
                 <Tooltip formatter={(v: number) => `${v.toLocaleString('tr-TR')} ${currencySymbol}`} />
                 <Bar dataKey="gelir" fill="hsl(142,71%,45%)"  radius={[4, 4, 0, 0]} name="Gelir" />
                 <Bar dataKey="gider" fill="hsl(0,84%,60%)"    radius={[4, 4, 0, 0]} name="Gider" />
@@ -519,7 +535,7 @@ export default function FinancePage() {
         </div>
 
         {/* Pie chart */}
-        <div className="bg-card rounded-2xl border border-border p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
           <p className="text-xs font-semibold text-muted-foreground mb-3">Gider Dağılımı</p>
           {pieData.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-4">Bu ay harcama kaydı yok</p>
@@ -626,7 +642,7 @@ export default function FinancePage() {
                           {tx.frequency !== 'none' && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
                           <span className={cn(
                             "text-sm font-semibold flex-shrink-0",
-                            tx.type === 'income' ? "text-success" : "text-destructive"
+                            tx.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
                           )}>
                             {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString('tr-TR')} {currencySymbol}
                           </span>
@@ -684,7 +700,7 @@ export default function FinancePage() {
                             {tx.frequency !== 'none' && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
                             <span className={cn(
                               "text-sm font-semibold flex-shrink-0",
-                              tx.type === 'income' ? "text-success" : "text-destructive"
+                              tx.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
                             )}>
                               {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString('tr-TR')} {currencySymbol}
                             </span>

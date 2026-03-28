@@ -311,10 +311,10 @@ export default function SuggestionsPage() {
             const isPending = s.status === 'pending';
             const cardBg =
               s.status === 'accepted'
-                ? 'bg-green-50 border-green-100'
+                ? 'bg-green-50 border-green-100 dark:bg-green-950/30 dark:border-green-800/50'
                 : s.status === 'skipped'
-                  ? 'bg-gray-100 border-gray-200'
-                  : 'bg-white border-border';
+                  ? 'bg-gray-100 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+                  : 'bg-white border-gray-100 dark:bg-gray-800 dark:border-gray-700';
 
             return (
               <div key={s.id} className={cn('border rounded-2xl p-4', cardBg)}>
@@ -326,11 +326,11 @@ export default function SuggestionsPage() {
                     <Icon size={20} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium leading-snug">
+                    <p className="text-sm font-medium leading-snug text-gray-800 dark:text-gray-100">
                       <HighlightMatch text={s.content} query={searchQuery} />
                     </p>
                     {s.reason && (
-                      <p className="text-xs text-muted-foreground mt-1">{s.reason}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{s.reason}</p>
                     )}
                   </div>
                 </div>
@@ -339,14 +339,14 @@ export default function SuggestionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleAccept(s.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-success/10 text-success rounded-xl text-sm font-medium active:scale-95 transition-transform"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl text-sm font-medium active:scale-95 transition-transform"
                     >
                       <Check className="w-4 h-4" /> Kabul Et
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleSkip(s.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-destructive/10 text-destructive rounded-xl text-sm font-medium active:scale-95 transition-transform"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400 rounded-xl text-sm font-medium active:scale-95 transition-transform"
                     >
                       <X className="w-4 h-4" /> Geç
                     </button>
@@ -384,10 +384,10 @@ export default function SuggestionsPage() {
                     type="button"
                     onClick={() => setSheetStatus(o.key)}
                     className={cn(
-                      'px-3 py-2 rounded-full text-xs font-medium border',
+                      'px-3 py-2 rounded-full text-xs font-medium border text-gray-600 dark:text-gray-300',
                       sheetStatus === o.key
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background border-border',
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600',
                     )}
                   >
                     {o.label}
@@ -403,10 +403,10 @@ export default function SuggestionsPage() {
                     type="button"
                     onClick={() => setSheetCategory(o.key)}
                     className={cn(
-                      'px-3 py-2 rounded-full text-xs font-medium border',
+                      'px-3 py-2 rounded-full text-xs font-medium border text-gray-600 dark:text-gray-300',
                       sheetCategory === o.key
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background border-border',
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600',
                     )}
                   >
                     {o.label}

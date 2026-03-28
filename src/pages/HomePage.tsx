@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Send, Mic } from 'lucide-react';
+import { Plus, Send, Mic, Bell, BarChart2 } from 'lucide-react';
 import { findOrCreateFriend } from '@/lib/friendsSupabase';
 import { supabase } from '@/lib/supabase';
 import { useChatStore } from '@/store/useChatStore';
@@ -335,57 +335,51 @@ export default function HomePage() {
   return (
     <>
     <div
-      className="bg-white max-w-[430px] mx-auto"
-      style={{
-        display: 'grid',
-        gridTemplateRows: 'auto 1fr auto',
-        height: 'calc(100dvh - 64px)',
-      }}
+      className="flex flex-col bg-white dark:bg-gray-900 max-w-[430px] mx-auto"
+      style={{ height: 'calc(100svh - 64px)' }}
     >
 
-      {/* ── Üst bar (auto) ──────────────────────────────────────────────────── */}
-      <div className="px-4 py-3 border-b border-gray-100 bg-white">
+      {/* ── Üst bar ─────────────────────────────────────────────────────────── */}
+      <div className="flex-none px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-semibold text-gray-800 text-base">
+            <h1 className="font-semibold text-base text-gray-900 dark:text-gray-100">
               {getGreeting()}{userName ? `, ${userName}` : ''} 👋
             </h1>
-            <p className="text-xs text-gray-400 capitalize mt-0.5">{todayDate}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 capitalize mt-0.5">{todayDate}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowWeeklySummary(true)}
-              className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg leading-none active:scale-95 transition-transform"
+              className="relative w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
               aria-label="Bu haftanı gör"
               title="Bu haftanı gör"
             >
-              📊
+              <BarChart2 size={20} />
             </button>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => navigate('/notifications')}
-                className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg leading-none active:scale-95 transition-transform"
-                aria-label="Bildirimler"
-              >
-                🔔
-              </button>
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="relative w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+              aria-label="Bildirimler"
+            >
+              <Bell size={20} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </div>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ── Mesajlar (1fr, scroll) + scroll sonu boşluğu (h-4) ───────────────── */}
+      {/* ── Mesajlar + scroll sonu (h-4) ────────────────────────────────────── */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="min-h-0 overflow-y-auto px-4 py-3"
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 bg-white dark:bg-gray-900"
         style={{ overscrollBehavior: 'contain' }}
       >
         {isLoadingMore && (
@@ -411,7 +405,7 @@ export default function HomePage() {
                 <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white rounded-br-none'
-                    : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-none'
                 }`}>
                   {msg.content}
                 </div>
@@ -423,11 +417,11 @@ export default function HomePage() {
                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0">
                   Z
                 </div>
-                <div className="bg-gray-100 px-4 py-3 rounded-2xl rounded-bl-none">
+                <div className="bg-gray-100 dark:bg-gray-700 px-4 py-3 rounded-2xl rounded-bl-none">
                   <div className="flex gap-1 items-center">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
               </div>
@@ -438,19 +432,16 @@ export default function HomePage() {
         <div ref={messagesEndRef} className="h-4" />
       </div>
 
-      {/* ── Input (auto) — yükseklik calc(100dvh - 64px) ile BottomNav payı düşülmüş ─ */}
-      <div
-        className="bg-white border-t border-gray-100"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-      >
+      {/* ── Input ───────────────────────────────────────────────────────────── */}
+      <div className="flex-none bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
         <div className="flex items-center gap-2 px-4 py-2">
           <button
             type="button"
             onClick={() => navigate('/add')}
-            className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0"
+            className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0"
             aria-label="Ekle"
           >
-            <Plus size={20} className="text-gray-600" />
+            <Plus size={20} className="text-gray-600 dark:text-gray-300" />
           </button>
 
           <textarea
@@ -469,7 +460,7 @@ export default function HomePage() {
             }}
             placeholder={placeholders[placeholderIndex]}
             rows={1}
-            className="flex-1 min-w-0 resize-none rounded-3xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm focus:outline-none focus:border-blue-400"
+            className="flex-1 min-w-0 resize-none rounded-3xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-blue-400"
             style={{ minHeight: '40px', maxHeight: '120px' }}
           />
 
@@ -491,11 +482,11 @@ export default function HomePage() {
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
               className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-600'
+                isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               }`}
               aria-label="Sesli giriş"
             >
-              <Mic size={20} className={isRecording ? 'text-white' : 'text-gray-600'} />
+              <Mic size={20} className={isRecording ? 'text-white' : 'text-gray-600 dark:text-gray-300'} />
             </button>
           )}
         </div>
