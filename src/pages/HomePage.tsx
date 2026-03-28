@@ -6,6 +6,7 @@ import { useChatStore } from '@/store/useChatStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
 import { useAuthStore } from '@/store/useAuthStore';
+import WeeklySummaryPage from '@/pages/WeeklySummaryPage';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl    = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
@@ -37,6 +38,7 @@ export default function HomePage() {
   const [isLoadingMore,    setIsLoadingMore]    = useState(false);
   const [isChatLoading,    setIsChatLoading]    = useState(false);
   const [isRecording,      setIsRecording]      = useState(false);
+  const [showWeeklySummary, setShowWeeklySummary] = useState(false);
 
   const recognitionRef       = useRef<any>(null);
   const messagesEndRef       = useRef<HTMLDivElement>(null);
@@ -304,6 +306,15 @@ export default function HomePage() {
                 </span>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowWeeklySummary(true)}
+              className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg leading-none active:scale-95 transition-transform"
+              aria-label="Bu haftanı gör"
+              title="Bu haftanı gör"
+            >
+              📊
+            </button>
             {/* Add button */}
             <button
               onClick={() => navigate('/add')}
@@ -438,6 +449,11 @@ export default function HomePage() {
       </div>
 
       {/* ── Recording overlay ────────────────────────────────────────────────── */}
+      <WeeklySummaryPage
+        isOpen={showWeeklySummary}
+        onClose={() => setShowWeeklySummary(false)}
+      />
+
       {isRecording && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 shadow-xl mx-8">

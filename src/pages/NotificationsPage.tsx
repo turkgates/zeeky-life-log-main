@@ -85,7 +85,7 @@ function groupNotifications(items: Notification[]): { label: string; items: Noti
 export default function NotificationsPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const userId = user?.id ?? '';
+  const userId = user?.id || '';
   const { setUnreadCount } = useNotificationStore();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -94,13 +94,17 @@ export default function NotificationsPage() {
   const longPressTimer = { current: 0 };
 
   const refreshUnreadCount = useCallback(async () => {
+    if (!userId) {
+      setUnreadCount(0);
+      return;
+    }
     const { count } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', USER_ID)
+      .eq('user_id', userId)
       .eq('is_read', false);
     setUnreadCount(count ?? 0);
-  }, [setUnreadCount]);
+  }, [setUnreadCount, userId]);
 
   const loadNotifications = useCallback(async () => {
     if (!userId) {
@@ -195,6 +199,26 @@ export default function NotificationsPage() {
   };
 
   const groups = useMemo(() => groupNotifications(notifications), [notifications]);
+
+  if (!userId) {
+    return (
+      <div className="min-h-screen bg-gray-50 max-w-[430px] mx-auto flex flex-col">
+        <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 flex items-center justify-center rounded-full active:bg-white/10"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="flex-1 text-base font-semibold">Bildirimler</h1>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center text-gray-500 text-sm">
+          <p>Bildirimleri görmek için giriş yapmalısın.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-[430px] mx-auto flex flex-col">

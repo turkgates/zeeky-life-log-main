@@ -82,10 +82,15 @@ export default function FinancePage() {
   // ── Load transactions ────────────────────────────────────────────────────
   const loadTransactions = useCallback(async () => {
     setTxLoading(true);
-    const txs = await fetchTransactions(viewYear, viewMonth);
+    if (!userId) {
+      setTransactions([]);
+      setTxLoading(false);
+      return;
+    }
+    const txs = await fetchTransactions(userId, viewYear, viewMonth);
     setTransactions(txs);
     setTxLoading(false);
-  }, [viewYear, viewMonth]);
+  }, [userId, viewYear, viewMonth]);
 
   useEffect(() => { void loadTransactions(); }, [loadTransactions]);
 

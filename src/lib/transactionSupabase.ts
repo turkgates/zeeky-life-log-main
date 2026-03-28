@@ -63,16 +63,30 @@ function mapRow(row: Record<string, unknown>): Transaction {
 
 // ── Fetch ────────────────────────────────────────────────────────────────────
 
-export async function fetchTransactions(userId: string, year: number, month: number): Promise<Transaction[]> {
+export async function fetchTransactions(userId: string, year?: number, month?: number): Promise<Transaction[]> {
   if (!userId) return [];
-  const startOfMonth = new Date(year, month, 1).toISOString();
-  const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
+  const safeYear = (year && !isNaN(year)) ? year : new Date().getFullYear();
+  const safeMonth = (month !== undefined && !isNaN(month)) ? month : new Date().getMonth();
+
+  let startOfMonth = new Date(safeYear, safeMonth, 1);
+  let endOfMonth = new Date(safeYear, safeMonth + 1, 0, 23, 59, 59, 999);
+
+  if (isNaN(startOfMonth.getTime()) || isNaN(endOfMonth.getTime())) {
+    const now = new Date();
+    const safeStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const safeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    startOfMonth = safeStart;
+    endOfMonth = safeEnd;
+  }
+
+  const startOfMonthIso = startOfMonth.toISOString();
+  const endOfMonthIso = endOfMonth.toISOString();
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
     .eq('user_id', userId)
-    .gte('transaction_date', startOfMonth)
-    .lte('transaction_date', endOfMonth)
+    .gte('transaction_date', startOfMonthIso)
+    .lte('transaction_date', endOfMonthIso)
     .order('transaction_date', { ascending: false });
   if (error) { console.error('fetchTransactions:', error); return []; }
   return (data || []).map(mapRow);
