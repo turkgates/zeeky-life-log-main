@@ -67,9 +67,6 @@ export default function HomePage() {
   const [isRecording,      setIsRecording]      = useState(false);
   const [showWeeklySummary, setShowWeeklySummary] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(() =>
-    typeof window !== 'undefined' ? window.innerHeight : 0,
-  );
 
   const recognitionRef       = useRef<any>(null);
   const messagesEndRef       = useRef<HTMLDivElement>(null);
@@ -100,14 +97,6 @@ export default function HomePage() {
       setPlaceholderIndex(prev => (prev + 1) % placeholders.length);
     }, 3000);
     return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const updateHeight = () => {
-      setViewportHeight(window.innerHeight);
-    };
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
   }, []);
 
   // ── Load user name (metadata first, then users table) ─────────────────────
@@ -216,7 +205,7 @@ export default function HomePage() {
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
     });
-  }, [isLoaded, viewportHeight, messages.length]);
+  }, [isLoaded, messages.length]);
 
   // Pull older messages when scrolled to top
   const handleScroll = useCallback(() => {
@@ -336,15 +325,7 @@ export default function HomePage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-    <div
-      className="flex flex-col bg-white dark:bg-gray-900 max-w-[430px] mx-auto"
-      style={{
-        height:
-          viewportHeight > 0
-            ? `${viewportHeight - 64}px`
-            : 'calc(100svh - 64px)',
-      }}
-    >
+    <div className="flex flex-col flex-1 min-h-0 w-full bg-white dark:bg-gray-900">
 
       {/* ── Üst bar ─────────────────────────────────────────────────────────── */}
       <div className="flex-none px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900">
