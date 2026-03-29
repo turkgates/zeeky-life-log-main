@@ -1,18 +1,20 @@
 import { Home, ClipboardList, Lightbulb, User, Wallet } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-
-const tabs = [
-  { path: '/', icon: Home, label: 'Ana Sayfa' },
-  { path: '/history', icon: ClipboardList, label: 'Neler Yaptım' },
-  { path: '/finance', icon: Wallet, label: 'Gelir & Gider' },
-  { path: '/suggestions', icon: Lightbulb, label: 'Tavsiyeler' },
-  { path: '/profile', icon: User, label: 'Profil' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  const tabs = [
+    { path: '/', icon: Home, label: t('nav.home') },
+    { path: '/history', icon: ClipboardList, label: t('nav.history') },
+    { path: '/finance', icon: Wallet, label: t('nav.finance') },
+    { path: '/suggestions', icon: Lightbulb, label: t('nav.suggestions') },
+    { path: '/profile', icon: User, label: t('nav.profile') },
+  ];
 
   if (
     location.pathname === '/add'

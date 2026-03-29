@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { DailySplashScreen } from "@/components/DailySplashScreen";
+import { useCallback, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -23,6 +24,7 @@ import NotFound from "./pages/NotFound";
 import { getUserCurrency, supabase } from "@/lib/supabase";
 import { useCurrencyStore } from "@/store/useCurrencyStore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useLanguageStore } from "@/store/useLanguageStore";
 
 function CurrencyLoader() {
   const setCurrency = useCurrencyStore(s => s.setCurrency);
@@ -59,10 +61,14 @@ function OnboardingGuard() {
 }
 
 function AppRoutes() {
-  const initialize = useAuthStore(s => s.initialize);
+  const user = useAuthStore(s => s.user);
+  const { loadLanguage } = useLanguageStore();
+
   useEffect(() => {
-    void initialize();
-  }, [initialize]);
+    if (user?.id) {
+      void loadLanguage(user.id);
+    }
+  }, [user?.id, loadLanguage]);
 
   return (
     <>
@@ -95,14 +101,51 @@ function AppRoutes() {
 
 const queryClient = new QueryClient();
 
+function AppShell() {
+  const initialize = useAuthStore(s => s.initialize);
+  const user = useAuthStore(s => s.user);
+  const isLoading = useAuthStore(s => s.isLoading);
+  const [showSplash, setShowSplash] = useState(false);
+
+  useEffect(() => {
+    void initialize();
+  }, [initialize]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!user?.id) {
+      setShowSplash(false);
+      return;
+    }
+    const today = new Date().toDateString();
+    const lastSplash = localStorage.getItem(`zeeky_splash_${user.id}`);
+    setShowSplash(lastSplash !== today);
+  }, [user?.id, isLoading]);
+
+  const handleSplashComplete = useCallback(() => {
+    if (user?.id) {
+      localStorage.setItem(`zeeky_splash_${user.id}`, new Date().toDateString());
+    }
+    setShowSplash(false);
+  }, [user?.id]);
+
+  if (showSplash) {
+    return <DailySplashScreen onComplete={handleSplashComplete} />;
+  }
+
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <TooltipProvider>
         <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <AppShell />
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

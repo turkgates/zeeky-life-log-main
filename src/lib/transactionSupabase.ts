@@ -81,6 +81,7 @@ export async function fetchTransactions(userId: string, year?: number, month?: n
 
   const startOfMonthIso = startOfMonth.toISOString();
   const endOfMonthIso = endOfMonth.toISOString();
+  console.log('Date filter:', startOfMonthIso, endOfMonthIso);
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
@@ -89,6 +90,7 @@ export async function fetchTransactions(userId: string, year?: number, month?: n
     .lte('transaction_date', endOfMonthIso)
     .order('transaction_date', { ascending: false });
   if (error) { console.error('fetchTransactions:', error); return []; }
+  console.log('Transactions count:', data?.length);
   return (data || []).map(mapRow);
 }
 

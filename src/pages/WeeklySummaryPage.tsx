@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { supabase, getUserCurrency } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useLanguageStore } from '@/store/useLanguageStore';
+import { useTranslation } from 'react-i18next';
 
 export interface WeeklySummaryData {
   week_label: string;
   ai_comment: string;
+  language?: string;
   sport_days: number;
   sport_goal: number;
   sport_days_prev_week?: number;
@@ -25,6 +28,8 @@ interface Props {
 }
 
 export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
+  const { t } = useTranslation();
+  const { language } = useLanguageStore();
   const user = useAuthStore(s => s.user);
   const userId = user?.id ?? '';
 
@@ -40,7 +45,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-  const generateSummary = useCallback(async () => {
+  const generateSummary = useCallback(async (_force?: boolean) => {
     if (!userId) return;
     setIsGenerating(true);
     try {
@@ -51,14 +56,20 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
           Authorization: `Bearer ${supabaseAnonKey}`,
           apikey: supabaseAnonKey,
         },
-        body: JSON.stringify({ user_id: userId }),
+        body: JSON.stringify({
+          user_id: userId,
+          language,
+        }),
       });
       const data = (await response.json()) as { summary?: WeeklySummaryData };
-      if (data.summary) setSummary(data.summary);
+      if (data.summary) {
+        const summary: WeeklySummaryData = { ...data.summary, language };
+        setSummary(summary);
+      }
     } finally {
       setIsGenerating(false);
     }
-  }, [supabaseUrl, supabaseAnonKey, userId]);
+  }, [supabaseUrl, supabaseAnonKey, userId, language]);
 
   const checkAndLoad = useCallback(async () => {
     if (!userId) return;
@@ -92,6 +103,15 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
     }
 
     if (existing?.summary_data) {
+      const savedLanguage = (existing.summary_data as WeeklySummaryData).language;
+      if (!savedLanguage || savedLanguage !== language) {
+        try {
+          await generateSummary(true);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
       setSummary(existing.summary_data as WeeklySummaryData);
       setIsGenerating(false);
       setIsLoading(false);
@@ -99,11 +119,11 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
     }
 
     try {
-      await generateSummary();
+      await generateSummary(true);
     } finally {
       setIsLoading(false);
     }
-  }, [generateSummary, userId]);
+  }, [generateSummary, userId, language]);
 
   useEffect(() => {
     if (!isOpen || !userId) return;
@@ -111,9 +131,10 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
   }, [isOpen, userId]);
 
   useEffect(() => {
-    if (!isOpen || !userId) return;
-    void checkAndLoad();
-  }, [isOpen, userId, checkAndLoad]);
+    if (isOpen && userId) {
+      void checkAndLoad();
+    }
+  }, [isOpen, userId, language, checkAndLoad]);
 
   const handleDragStart = (e: React.TouchEvent) => {
     dragStartY.current = e.touches[0].clientY;
@@ -130,7 +151,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
   };
 
   const handleRefresh = () => {
-    void generateSummary();
+    void generateSummary(true);
   };
 
   if (!isOpen) return null;
@@ -178,16 +199,16 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
               type="button"
               onClick={onClose}
               className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30"
-              aria-label="Kapat"
+              aria-label={t('common.close')}
             >
               <X className="h-5 w-5" />
             </button>
-            <p className="text-sm opacity-75">Haftalık Özet</p>
+            <p className="text-sm opacity-75">{t('weekly_summary.title')}</p>
             {showInitialSpinner ? (
               <div className="mt-4 flex flex-col items-center gap-4 py-6 pr-8">
                 <div className="h-10 w-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 <p className="text-center text-sm leading-relaxed opacity-90">
-                  Zeeky geçen haftanı analiz ediyor...
+                  {t('weekly_summary.generating')}
                 </p>
               </div>
             ) : summary ? (
@@ -196,16 +217,14 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
                 <p className="mt-3 text-sm leading-relaxed opacity-90">{summary.ai_comment}</p>
               </>
             ) : (
-              <p className="mt-3 text-sm opacity-90">Özet yüklenemedi.</p>
+              <p className="mt-3 text-sm opacity-90">{t('weekly_summary.error')}</p>
             )}
           </div>
 
           {showInitialSpinner ? null : isEmptyData ? (
             <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-              <p className="text-gray-600 leading-relaxed">
-                Geçen hafta henüz yeterli veri yok.
-                <br />
-                Zeeky ile daha fazla konuş!
+              <p className="text-gray-600 leading-relaxed whitespace-pre-line">
+                {t('weekly_summary.no_data')}
               </p>
               <button
                 type="button"
@@ -213,7 +232,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
                 disabled={isGenerating}
                 className="mt-6 w-full max-w-xs rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
               >
-                {isGenerating ? 'Zeeky analiz ediyor...' : 'Yenile'}
+                {isGenerating ? t('weekly_summary.refreshing') : t('weekly_summary.refresh')}
               </button>
             </div>
           ) : summary ? (
@@ -222,29 +241,29 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3">
                   <div className="text-lg">🏃</div>
-                  <p className="mt-1 text-xs font-medium text-gray-500">Spor</p>
+                  <p className="mt-1 text-xs font-medium text-gray-500">{t('weekly_summary.sport')}</p>
                   <p className="mt-0.5 text-lg font-semibold text-gray-900">
-                    {summary.sport_days} gün
+                    {summary.sport_days} {t('profile.days')}
                   </p>
                   <p className="mt-1 text-xs">
                     {summary.sport_days >= summary.sport_goal ? (
-                      <span className="text-green-600">✅ Hedef tutturuldu!</span>
+                      <span className="text-green-600">{t('weekly_summary.goal_achieved')}</span>
                     ) : summary.sport_days > 0 ? (
                       <span className="text-amber-600">
-                        {summary.sport_goal - summary.sport_days} gün eksik
+                        {t('weekly_summary.days_missing', { count: summary.sport_goal - summary.sport_days })}
                       </span>
                     ) : (
-                      <span className="text-red-500">Bu hafta spor yok</span>
+                      <span className="text-red-500">{t('weekly_summary.no_sport')}</span>
                     )}
                   </p>
                   {sportDelta !== undefined && (
                     <p className="mt-1 text-xs text-gray-500">
                       {sportDelta > 0 ? (
-                        <span className="text-green-600">↑ {sportDelta} önceki haftaya göre</span>
+                        <span className="text-green-600">{t('weekly_summary.prev_increase', { count: sportDelta })}</span>
                       ) : sportDelta < 0 ? (
-                        <span className="text-red-500">↓ {Math.abs(sportDelta)} önceki haftaya göre</span>
+                        <span className="text-red-500">{t('weekly_summary.prev_decrease', { count: Math.abs(sportDelta) })}</span>
                       ) : (
-                        <span>→ Önceki hafta ile aynı</span>
+                        <span>{t('weekly_summary.prev_same')}</span>
                       )}
                     </p>
                   )}
@@ -252,18 +271,18 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
 
                 <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3">
                   <div className="text-lg">👥</div>
-                  <p className="mt-1 text-xs font-medium text-gray-500">Sosyal</p>
+                  <p className="mt-1 text-xs font-medium text-gray-500">{t('weekly_summary.social')}</p>
                   <p className="mt-0.5 text-lg font-semibold text-gray-900">
-                    {summary.social_count} aktivite
+                    {summary.social_count} {t('weekly_summary.activity_label')}
                   </p>
                   {socialDelta !== undefined && (
                     <p className="mt-2 text-xs text-gray-500">
                       {socialDelta > 0 ? (
-                        <span className="text-green-600">↑ {socialDelta} önceki haftaya göre</span>
+                        <span className="text-green-600">{t('weekly_summary.prev_increase', { count: socialDelta })}</span>
                       ) : socialDelta < 0 ? (
-                        <span className="text-red-500">↓ {Math.abs(socialDelta)} önceki haftaya göre</span>
+                        <span className="text-red-500">{t('weekly_summary.prev_decrease', { count: Math.abs(socialDelta) })}</span>
                       ) : (
-                        <span>→ Önceki hafta ile aynı</span>
+                        <span>{t('weekly_summary.prev_same')}</span>
                       )}
                     </p>
                   )}
@@ -271,7 +290,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
 
                 <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3">
                   <div className="text-lg">💰</div>
-                  <p className="mt-1 text-xs font-medium text-gray-500">Harcama</p>
+                  <p className="mt-1 text-xs font-medium text-gray-500">{t('weekly_summary.expense')}</p>
                   <p className="mt-0.5 text-lg font-semibold text-gray-900">
                     {summary.week_expense}
                     {currencySymbol}
@@ -279,31 +298,31 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
                   <p className="mt-1 text-xs">
                     {summary.expense_change_percent > 0 ? (
                       <span className="text-red-500">
-                        ↑ %{Math.abs(summary.expense_change_percent).toFixed(0)} arttı
+                        {t('weekly_summary.expense_increased', { pct: Math.abs(summary.expense_change_percent).toFixed(0) })}
                       </span>
                     ) : summary.expense_change_percent < 0 ? (
                       <span className="text-green-600">
-                        ↓ %{Math.abs(summary.expense_change_percent).toFixed(0)} azaldı
+                        {t('weekly_summary.expense_decreased', { pct: Math.abs(summary.expense_change_percent).toFixed(0) })}
                       </span>
                     ) : (
-                      <span className="text-gray-500">Değişmedi</span>
+                      <span className="text-gray-500">{t('weekly_summary.expense_unchanged')}</span>
                     )}
                   </p>
                 </div>
 
                 <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-3">
                   <div className="text-lg">📊</div>
-                  <p className="mt-1 text-xs font-medium text-gray-500">Toplam</p>
+                  <p className="mt-1 text-xs font-medium text-gray-500">{t('weekly_summary.total')}</p>
                   <p className="mt-0.5 text-lg font-semibold text-gray-900">
-                    {summary.total_activities} kayıt
+                    {summary.total_activities} {t('weekly_summary.activities_label')}
                   </p>
-                  <p className="mt-1 text-xs text-gray-500">Bu hafta kaydedildi</p>
+                  <p className="mt-1 text-xs text-gray-500">{t('weekly_summary.recorded_this_week')}</p>
                 </div>
               </div>
 
               {/* Top activities */}
               <div className="mt-6">
-                <h3 className="text-sm font-semibold text-gray-800">En sık yapılan eylemler</h3>
+                <h3 className="text-sm font-semibold text-gray-800">{t('weekly_summary.top_activities')}</h3>
                 <div className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-100 px-3">
                   {(summary.top_activities ?? []).map((item, i) => (
                     <div key={i} className="flex items-center gap-3 py-2">
@@ -316,7 +335,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
 
               {/* Social */}
               <div className="mt-6">
-                <h3 className="text-sm font-semibold text-gray-800">Bu hafta en çok görüştüklerin:</h3>
+                <h3 className="text-sm font-semibold text-gray-800">{t('weekly_summary.top_people')}</h3>
                 <div className="mt-2 space-y-2">
                   {(summary.top_people ?? []).map((person, i) => (
                     <div key={i} className="flex items-center gap-2">
@@ -331,7 +350,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
 
               {/* Expense categories */}
               <div className="mt-6">
-                <h3 className="text-sm font-semibold text-gray-800">En çok harcadığın kategoriler:</h3>
+                <h3 className="text-sm font-semibold text-gray-800">{t('weekly_summary.top_expenses')}</h3>
                 <div className="mt-2">
                   {(summary.top_expense_categories ?? []).map((item, i) => {
                     const [label, amount] = item.split(':');
@@ -356,19 +375,19 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
                 disabled={isGenerating}
                 className="mt-6 w-full rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
               >
-                {isGenerating ? 'Zeeky analiz ediyor...' : 'Yenile'}
+                {isGenerating ? t('weekly_summary.refreshing') : t('weekly_summary.refresh')}
               </button>
             </div>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center px-6 py-10">
-              <p className="mb-4 text-center text-sm text-gray-600">Özet alınamadı. Tekrar dene.</p>
+              <p className="mb-4 text-center text-sm text-gray-600">{t('weekly_summary.error')}</p>
               <button
                 type="button"
                 onClick={handleRefresh}
                 disabled={isGenerating}
                 className="w-full max-w-xs rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
               >
-                {isGenerating ? 'Zeeky analiz ediyor...' : 'Yenile'}
+                {isGenerating ? t('weekly_summary.refreshing') : t('weekly_summary.refresh')}
               </button>
             </div>
           )}

@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2, Search, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { getActivityCategory } from '@/lib/categoryTranslations';
 import { HighlightMatch } from '@/components/HighlightMatch';
 import CategoryIcon from '@/components/CategoryIcon';
 import SwipeableCard from '@/components/SwipeableCard';
@@ -19,19 +21,17 @@ import { Activity } from '@/types/zeeky';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
 import { useAuthStore } from '@/store/useAuthStore';
-
-const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-const DAY_SHORT = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
-const DAY_NAMES = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+import {
+  formatDate,
+  getDayName,
+  getMonthName,
+  getLocaleTag,
+  formatActivityDate,
+  activityDateTimeSource,
+} from '@/lib/dateLocale';
 
 function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function formatDateHeader(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00');
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}, ${DAY_NAMES[d.getDay()]}`;
 }
 
 function getWeekDays(base: Date): Date[] {
@@ -46,7 +46,32 @@ function getWeekDays(base: Date): Date[] {
   });
 }
 
+const SEARCH_GROUP_ORDER = ['today', 'yesterday', 'this_week', 'this_month', 'older'] as const;
+type SearchGroupId = (typeof SEARCH_GROUP_ORDER)[number];
+
+function getActivityGroupId(dateStr: string): SearchGroupId {
+  const today = toYMD(new Date());
+  const yesterday = toYMD(new Date(Date.now() - 86_400_000));
+  if (dateStr === today) return 'today';
+  if (dateStr === yesterday) return 'yesterday';
+  const d = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return 'older';
+  const now = new Date();
+  const start = new Date(now);
+  const dow = start.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  start.setDate(start.getDate() + diff);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  if (d >= start && d <= end) return 'this_week';
+  if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) return 'this_month';
+  return 'older';
+}
+
 export default function HistoryPage() {
+  const { t, i18n } = useTranslation();
   const navigate       = useNavigate();
   const { user }       = useAuthStore();
   const userId         = user?.id ?? '';
@@ -81,6 +106,22 @@ export default function HistoryPage() {
   const weekDays = getWeekDays(currentWeekBase);
 
   const isGlobalSearch = showSearch && searchQuery.length >= 2;
+
+  const groupedSearchResults = useMemo(() => {
+    const buckets: Record<SearchGroupId, Activity[]> = {
+      today: [],
+      yesterday: [],
+      this_week: [],
+      this_month: [],
+      older: [],
+    };
+    searchResults.forEach(a => {
+      buckets[getActivityGroupId(a.date)].push(a);
+    });
+    return SEARCH_GROUP_ORDER
+      .filter(id => buckets[id].length > 0)
+      .map(id => ({ groupId: id, items: buckets[id] }));
+  }, [searchResults]);
 
   const searchAllActivities = useCallback(async (q: string) => {
     if (!userId || q.length < 2) return;
@@ -268,14 +309,15 @@ export default function HistoryPage() {
   const prevWeek = () => setCurrentWeekBase(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; });
   const nextWeek = () => setCurrentWeekBase(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
 
-  const monthLabel = (() => {
+  const monthLabel = useMemo(() => {
     const first = weekDays[0];
     const last = weekDays[6];
-    if (first.getMonth() === last.getMonth()) {
-      return `${MONTH_NAMES[first.getMonth()]} ${first.getFullYear()}`;
+    const loc = getLocaleTag();
+    if (first.getMonth() === last.getMonth() && first.getFullYear() === last.getFullYear()) {
+      return getMonthName(first);
     }
-    return `${MONTH_NAMES[first.getMonth()]} – ${MONTH_NAMES[last.getMonth()]} ${last.getFullYear()}`;
-  })();
+    return `${first.toLocaleDateString(loc, { month: 'long' })} – ${getMonthName(last)}`;
+  }, [currentWeekBase, i18n.language]);
 
   return (
     <div className="pb-24 w-full animate-fade-in">
@@ -283,7 +325,7 @@ export default function HistoryPage() {
       {/* ── Title + search (sticky) ───────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-background">
         <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">Neler Yaptım</h1>
+          <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">{t('history.title')}</h1>
           <div className="flex gap-3">
             <button
               type="button"
@@ -304,7 +346,7 @@ export default function HistoryPage() {
                 type="search"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Aktivite ara..."
+                placeholder={t('history.search_placeholder')}
                 className="w-full border border-gray-200 dark:border-border rounded-2xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:border-blue-400 bg-gray-50 dark:bg-muted"
               />
               <button
@@ -323,46 +365,55 @@ export default function HistoryPage() {
       {isGlobalSearch ? (
         <div className="px-4 mb-4">
           <p className="text-xs text-muted-foreground py-2">
-            {searchLoading ? 'Aranıyor…' : `${searchResults.length} sonuç bulundu`}
+            {searchLoading ? t('history.searching') : t('history.results_count', { count: searchResults.length })}
           </p>
           {searchLoading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-2">
               <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-              <p className="text-xs text-muted-foreground">Aranıyor…</p>
+              <p className="text-xs text-muted-foreground">{t('history.searching')}</p>
             </div>
           ) : searchResults.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">Sonuç bulunamadı</p>
+            <p className="text-center text-muted-foreground py-8">{t('history.no_results')}</p>
           ) : (
-            <div className="space-y-2">
-              {searchResults.map(a => {
-                const amount = a.details?.amount as number | undefined;
-                return (
-                  <SwipeableCard
-                    key={a.id}
-                    isOpen={swipedCardId === a.id}
-                    onSwipeOpen={() => setSwipedCardId(prev => prev === a.id ? null : a.id)}
-                    onEdit={() => { setSwipedCardId(null); navigate('/add', { state: { editId: a.id, category: a.category } }); }}
-                    onDelete={() => setDeleteConfirm(a.id)}
-                  >
-                    <div className="flex items-center gap-3 p-3" onClick={() => setSelectedActivity(a)}>
-                      <CategoryIcon category={a.category} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">{formatDateHeader(a.date)}</p>
-                        <p className="text-sm font-medium truncate">
-                          <HighlightMatch text={a.title} query={searchQuery} />
-                        </p>
-                        {amount != null && (
-                          <p className="text-xs font-medium text-foreground">
-                            {amount.toLocaleString('tr-TR')} {currencySymbol}
-                          </p>
-                        )}
-                        {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
-                      </div>
-                      <span className="text-xs text-muted-foreground tabular-nums">{a.time}</span>
-                    </div>
-                  </SwipeableCard>
-                );
-              })}
+            <div className="space-y-4">
+              {groupedSearchResults.map(({ groupId, items }) => (
+                <div key={groupId}>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">{t(`history.${groupId}`)}</p>
+                  <div className="space-y-2">
+                    {items.map(a => {
+                      const amount = a.details?.amount as number | undefined;
+                      return (
+                        <SwipeableCard
+                          key={a.id}
+                          isOpen={swipedCardId === a.id}
+                          onSwipeOpen={() => setSwipedCardId(prev => prev === a.id ? null : a.id)}
+                          onEdit={() => { setSwipedCardId(null); navigate('/add', { state: { editId: a.id, category: a.category } }); }}
+                          onDelete={() => setDeleteConfirm(a.id)}
+                        >
+                          <div className="flex items-center gap-3 p-3" onClick={() => setSelectedActivity(a)}>
+                            <CategoryIcon category={a.category} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] text-muted-foreground mb-0.5">
+                                {getActivityCategory(a.category)} · {formatActivityDate(activityDateTimeSource(a))}
+                              </p>
+                              <p className="text-sm font-medium truncate">
+                                <HighlightMatch text={a.title} query={searchQuery} />
+                              </p>
+                              {amount != null && (
+                                <p className="text-xs font-medium text-foreground">
+                                  {amount.toLocaleString('tr-TR')} {currencySymbol}
+                                </p>
+                              )}
+                              {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
+                            </div>
+                            <span className="text-xs text-muted-foreground tabular-nums">{a.time}</span>
+                          </div>
+                        </SwipeableCard>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -393,7 +444,7 @@ export default function HistoryPage() {
                   isSelected ? "bg-primary text-primary-foreground" : "text-foreground"
                 )}
               >
-                <span className="text-[10px] font-medium opacity-70">{DAY_SHORT[d.getDay()]}</span>
+                <span className="text-[10px] font-medium opacity-70">{getDayName(d)}</span>
                 <span className="text-sm font-semibold">{d.getDate()}</span>
                 {hasData
                   ? <div className={cn("w-1.5 h-1.5 rounded-full", isSelected ? "bg-primary-foreground" : "bg-primary")} />
@@ -409,7 +460,7 @@ export default function HistoryPage() {
       {favorites.length > 0 && (
         <div className="px-4 mb-4">
           <h2 className="font-semibold text-sm flex items-center gap-1 mb-3">
-            <Star className="w-4 h-4 text-accent" /> Favoriler
+            <Star className="w-4 h-4 text-accent" /> {t('history.favorites')}
           </h2>
           <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">
             {favorites.map(fav => (
@@ -445,21 +496,25 @@ export default function HistoryPage() {
 
       {/* ── Activities for selected day ─────────────────────────────────── */}
       <div className="px-4">
-        <h3 className="text-xs font-semibold text-muted-foreground mb-3">{formatDateHeader(selectedDate)}</h3>
+        <h3 className="text-xs font-semibold text-muted-foreground mb-3">{formatDate(selectedDate)}</h3>
         {dayLoading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-            <p className="text-xs text-muted-foreground">Yükleniyor…</p>
+            <p className="text-xs text-muted-foreground">{t('history.loading')}</p>
           </div>
         ) : dayActivities.length === 0 ? (
           <div className="text-center py-12">
             <InboxIcon className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Bu gün için aktivite yok</p>
+            <p className="text-sm text-muted-foreground">{t('history.no_activities')}</p>
           </div>
         ) : (
           <div className="space-y-2">
             {dayActivities.map(a => {
               const amount = a.details?.amount as number | undefined;
+              const at = new Date(activityDateTimeSource(a));
+              const timeLabel = Number.isNaN(at.getTime())
+                ? a.time
+                : at.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
               return (
                 <SwipeableCard
                   key={a.id}
@@ -471,6 +526,7 @@ export default function HistoryPage() {
                   <div className="flex items-center gap-3 p-3" onClick={() => setSelectedActivity(a)}>
                     <CategoryIcon category={a.category} />
                     <div className="flex-1 min-w-0">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">{getActivityCategory(a.category)}</p>
                       <p className="text-sm font-medium truncate">{a.title}</p>
                       {amount != null && (
                         <p className="text-xs font-medium text-foreground">
@@ -479,7 +535,7 @@ export default function HistoryPage() {
                       )}
                       {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
                     </div>
-                    <span className="text-xs text-muted-foreground tabular-nums">{a.time}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{timeLabel}</span>
                   </div>
                 </SwipeableCard>
               );
@@ -495,10 +551,10 @@ export default function HistoryPage() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-card rounded-2xl p-6 mx-8 shadow-xl" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-center mb-4">Bu aktiviteyi silmek istediğine emin misin?</p>
+            <p className="text-sm font-medium text-center mb-4">{t('history.delete_confirm')}</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">İptal</button>
-              <button onClick={() => handleDeleteConfirm(deleteConfirm)} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-semibold text-sm">Sil</button>
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">{t('history.cancel')}</button>
+              <button onClick={() => handleDeleteConfirm(deleteConfirm)} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-semibold text-sm">{t('history.delete')}</button>
             </div>
           </div>
         </div>
@@ -541,7 +597,7 @@ export default function HistoryPage() {
                 <CategoryIcon category={favActionSheet.category as import('@/types/zeeky').ActionCategory} size="sm" />
                 <div>
                   <p className="text-sm font-semibold">{favActionSheet.title}</p>
-                  <p className="text-xs text-muted-foreground">Favori eylem</p>
+                  <p className="text-xs text-muted-foreground">{t('history.favorite_action')}</p>
                 </div>
               </div>
             </div>
@@ -558,7 +614,7 @@ export default function HistoryPage() {
                 <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
                   <Edit2 className="w-4 h-4 text-blue-600" />
                 </div>
-                <span className="text-sm font-medium">Düzenle</span>
+                <span className="text-sm font-medium">{t('history.edit')}</span>
               </button>
 
               <button
@@ -568,7 +624,7 @@ export default function HistoryPage() {
                 <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
                   <StarOff className="w-4 h-4 text-amber-600" />
                 </div>
-                <span className="text-sm font-medium">Favoriden Çıkar</span>
+                <span className="text-sm font-medium">{t('history.remove_favorite')}</span>
               </button>
 
               <button
@@ -578,7 +634,7 @@ export default function HistoryPage() {
                 <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
                   <Trash2 className="w-4 h-4 text-red-600" />
                 </div>
-                <span className="text-sm font-medium text-destructive">Sil</span>
+                <span className="text-sm font-medium text-destructive">{t('history.delete')}</span>
               </button>
             </div>
 
@@ -588,7 +644,7 @@ export default function HistoryPage() {
                 onClick={() => setFavActionSheet(null)}
                 className="w-full py-3.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm active:opacity-70"
               >
-                İptal
+                {t('history.cancel')}
               </button>
             </div>
           </div>
@@ -605,22 +661,22 @@ export default function HistoryPage() {
             className="bg-card rounded-2xl p-5 mx-4 shadow-xl w-full max-w-[400px]"
             onClick={e => e.stopPropagation()}
           >
-            <p className="text-base font-semibold text-center mb-1">Eylemi sil</p>
+            <p className="text-base font-semibold text-center mb-1">{t('history.delete')}</p>
             <p className="text-sm text-muted-foreground text-center mb-5">
-              <span className="font-medium text-foreground">"{favDeleteConfirm.title}"</span> kalıcı olarak silinecek. Emin misin?
+              <span className="font-medium text-foreground">"{favDeleteConfirm.title}"</span> {t('history.delete_confirm')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setFavDeleteConfirm(null)}
                 className="flex-1 py-3 rounded-xl bg-muted text-muted-foreground font-semibold text-sm"
               >
-                İptal
+                {t('history.cancel')}
               </button>
               <button
                 onClick={() => void confirmDeleteFavorite(favDeleteConfirm)}
                 className="flex-1 py-3 rounded-xl bg-destructive text-white font-semibold text-sm"
               >
-                Sil
+                {t('history.delete')}
               </button>
             </div>
           </div>

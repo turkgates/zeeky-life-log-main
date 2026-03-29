@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Plus, Filter, Sparkles, ArrowRight, RefreshCw, ChevronLeft, ChevronRight, X, Loader2, Search } from 'lucide-react';
 import { HighlightMatch } from '@/components/HighlightMatch';
@@ -6,6 +6,9 @@ import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
+import { useLanguageStore } from '@/store/useLanguageStore';
+import { translateFinanceCategory, getSubcategory } from '@/lib/categoryTranslations';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -31,11 +34,11 @@ import {
   MONTH_SHORT,
   mapRow,
 } from '@/lib/transactionSupabase';
+import { formatDate, getMonthName } from '@/lib/dateLocale';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-const zeekyChatUrl = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
-
-const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const zeekySuggestionsUrl = `${supabaseUrl}/functions/v1/zeeky-suggestions`;
 
 type Period     = 'weekly' | 'monthly' | 'yearly';
 type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
@@ -45,27 +48,59 @@ type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 function toYMD(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function humanDate(dateStr: string) {
+function humanDate(dateStr: string, todayLabel: string, yesterdayLabel: string) {
   const today     = toYMD(new Date());
   const yesterday = toYMD(new Date(Date.now() - 86_400_000));
-  if (dateStr === today)     return 'Bugün';
-  if (dateStr === yesterday) return 'Dün';
-  const d = new Date(dateStr + 'T12:00:00');
-  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  if (dateStr === today)     return todayLabel;
+  if (dateStr === yesterday) return yesterdayLabel;
+  return formatDate(dateStr);
+}
+
+function txPassesDateFilter(tx: Transaction, f: TransactionFilters): boolean {
+  if (f.dateRange === 'all') return true;
+  const d = new Date(tx.date + 'T12:00:00');
+  const now = new Date();
+  const sod = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+  switch (f.dateRange) {
+    case 'thisMonth':
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    case 'lastMonth': {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return d >= start && d <= end;
+    }
+    case 'last3Months': {
+      const boundary = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      return d >= boundary;
+    }
+    case 'thisYear':
+      return d.getFullYear() === now.getFullYear();
+    case 'custom': {
+      if (!f.customStart || !f.customEnd) return true;
+      const txd = sod(d);
+      const s = sod(f.customStart);
+      const e = sod(f.customEnd);
+      return txd >= s && txd <= e;
+    }
+    default:
+      return true;
+  }
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function FinancePage() {
+  const { t, i18n } = useTranslation();
+  const { language } = useLanguageStore();
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
   const { symbol: currencySymbol, code: currencyCode } = useCurrencyStore();
   const { theme } = useTheme();
   const darkMode = theme === 'dark';
+  const locale = i18n.language;
 
-  const now = new Date();
-  const [viewYear,  setViewYear]  = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
 
   const [transactions,  setTransactions]  = useState<Transaction[]>([]);
   const [txLoading,     setTxLoading]     = useState(true);
@@ -75,6 +110,7 @@ export default function FinancePage() {
   const [chartLoading,  setChartLoading]  = useState(false);
   const [aiSuggestion,  setAiSuggestion]  = useState<string | null>(null);
   const [aiLoading,     setAiLoading]     = useState(false);
+  const [aiAttempted,   setAiAttempted]   = useState(false);
   const [showAdd,       setShowAdd]       = useState(false);
   const [selectedTx,    setSelectedTx]    = useState<Transaction | null>(null);
   const [swipedCardId,  setSwipedCardId]  = useState<string | null>(null);
@@ -96,94 +132,74 @@ export default function FinancePage() {
       setTxLoading(false);
       return;
     }
-    const txs = await fetchTransactions(userId, viewYear, viewMonth);
+    console.log('Finance selected period:', { selectedYear, selectedMonth });
+    const txs = await fetchTransactions(userId, selectedYear, selectedMonth);
     setTransactions(txs);
     setTxLoading(false);
-  }, [userId, viewYear, viewMonth]);
+  }, [userId, selectedYear, selectedMonth]);
 
   useEffect(() => { void loadTransactions(); }, [loadTransactions]);
 
   // ── Load categories once ─────────────────────────────────────────────────
   useEffect(() => { fetchCategories().then(setCategories); }, []);
 
-  // ── AI suggestion ────────────────────────────────────────────────────────
-  const fetchAiSuggestion = useCallback(async () => {
+  // ── AI suggestion (zeeky-suggestions only — not zeeky-chat) ─────────────────
+  const fetchAiSuggestion = useCallback(async (mode: 'auto' | 'refresh' = 'auto') => {
     if (!userId) return;
     setAiLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // 1. Check if today's suggestion already exists
-      const { data: existing } = await supabase
-        .from('suggestions')
-        .select('content, generated_at')
-        .eq('user_id', userId)
-        .eq('category', 'finans')
-        .gte('generated_at', `${today}T00:00:00.000Z`)
-        .lte('generated_at', `${today}T23:59:59.999Z`)
-        .order('generated_at', { ascending: false })
-        .limit(1)
-        .single();
+      if (mode === 'auto') {
+        const { data: existing } = await supabase
+          .from('suggestions')
+          .select('content, generated_at')
+          .eq('user_id', userId)
+          .eq('category', 'finans')
+          .gte('generated_at', `${today}T00:00:00.000Z`)
+          .lte('generated_at', `${today}T23:59:59.999Z`)
+          .order('generated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (existing?.content) {
-        setAiSuggestion(existing.content);
-        return;
+        if (existing?.content) {
+          setAiSuggestion(existing.content);
+          return;
+        }
       }
 
-      // 2. No cached suggestion — fetch from API
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const endOfMonth   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-
-      const { data: txData } = await supabase
-        .from('transactions')
-        .select('type, amount, category')
-        .eq('user_id', userId)
-        .gte('transaction_date', startOfMonth)
-        .lte('transaction_date', endOfMonth);
-
-      const income  = txData?.filter(t => t.type === 'income' ).reduce((s, t) => s + Number(t.amount), 0) ?? 0;
-      const expense = txData?.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0) ?? 0;
-
-      const response = await fetch(zeekyChatUrl, {
+      const response = await fetch(zeekySuggestionsUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-          'apikey': supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          apikey: supabaseAnonKey,
         },
         body: JSON.stringify({
-          message: `Bu ayki finansal durumumu analiz et ve tek cümle öneri ver. Gelir: ${income}${currencySymbol}, Gider: ${expense}${currencySymbol}, Bakiye: ${income - expense}${currencySymbol}`,
           user_id: userId,
-          personality: 'balanced',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          current_datetime: new Date().toISOString(),
+          mode,
+          language,
+          category_filter: 'finans',
         }),
       });
-      const data = await response.json();
-      console.log('Finance advice response:', data);
-      const cleanReply = data.reply?.trim();
-
-      if (cleanReply && cleanReply.length > 10) {
-        setAiSuggestion(cleanReply);
-        // 3. Save to suggestions table
-        await supabase.from('suggestions').insert({
-          user_id: userId,
-          category: 'finans',
-          content: cleanReply,
-          status: 'pending',
-          generated_at: new Date().toISOString(),
-        });
+      const data = (await response.json()) as {
+        suggestions?: Array<{ category: string; content: string }>;
+      };
+      const financeSuggestion = data.suggestions?.find(s => s.category === 'finans');
+      const text = financeSuggestion?.content?.trim();
+      if (text && text.length > 0) {
+        setAiSuggestion(text);
       } else {
         setAiSuggestion(null);
       }
     } catch (error) {
-      console.error('Finance advice error:', error);
+      console.error('Finance suggestion error:', error);
       setAiSuggestion(null);
     } finally {
       setAiLoading(false);
+      setAiAttempted(true);
     }
-  }, [currencySymbol, userId]);
+  }, [userId, language]);
 
   // Helper: invalidate today's cached suggestion then regenerate
   const invalidateAndRefreshAdvice = useCallback(async () => {
@@ -195,12 +211,34 @@ export default function FinancePage() {
       .eq('user_id', userId)
       .eq('category', 'finans')
       .gte('generated_at', `${today}T00:00:00.000Z`);
-    void fetchAiSuggestion();
+    void fetchAiSuggestion('refresh');
   }, [fetchAiSuggestion, userId]);
 
   useEffect(() => {
     if (!txLoading) void fetchAiSuggestion();
   }, [txLoading, fetchAiSuggestion]);
+
+  const prevLangRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId || txLoading) return;
+    if (prevLangRef.current === null) {
+      prevLangRef.current = language;
+      return;
+    }
+    if (prevLangRef.current === language) return;
+    prevLangRef.current = language;
+    void (async () => {
+      const today = new Date().toISOString().split('T')[0];
+      await supabase
+        .from('suggestions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('category', 'finans')
+        .gte('generated_at', `${today}T00:00:00.000Z`);
+      setAiSuggestion(null);
+      await fetchAiSuggestion();
+    })();
+  }, [language, userId, txLoading, fetchAiSuggestion]);
 
   // ── Chart data ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -215,14 +253,19 @@ export default function FinancePage() {
     setChartLoading(true);
     const fetch = period === 'monthly'
       ? fetchMonthlyChart(userId, 6)
-      : fetchYearlyChart(userId, viewYear);
+      : fetchYearlyChart(userId, selectedYear);
     fetch.then(d => { setChartData(d); setChartLoading(false); });
-  }, [period, transactions, viewYear, userId]);
+  }, [period, transactions, selectedYear, userId]);
 
   // ── Summaries ────────────────────────────────────────────────────────────
   const totalIncome  = useMemo(() => transactions.filter(t => t.type === 'income' ).reduce((s, t) => s + t.amount, 0), [transactions]);
   const totalExpense = useMemo(() => transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [transactions]);
   const balance      = totalIncome - totalExpense;
+
+  const chartHasNoData = useMemo(
+    () => chartData.length === 0 || chartData.every(d => !d.gelir && !d.gider),
+    [chartData],
+  );
 
   // ── Pie chart data ───────────────────────────────────────────────────────
   const pieData = useMemo(() => {
@@ -251,6 +294,7 @@ export default function FinancePage() {
 
   const filteredTx = useMemo(() => {
     let list = [...transactions];
+    if (filters.dateRange !== 'all') list = list.filter(t => txPassesDateFilter(t, filters));
     if (filters.type !== 'all') list = list.filter(t => t.type === filters.type);
     if (filters.categories.length > 0) {
       console.log('Normalized filter:', filters.categories.map(normalizeText));
@@ -313,13 +357,16 @@ export default function FinancePage() {
 
   const listForGroup = searchActive ? searchResults : filteredTx;
 
+  const todayLabel     = t('finance.today');
+  const yesterdayLabel = t('finance.yesterday');
+
   // Group by date — newest day first; within each day, newest transaction first
   const grouped = useMemo(() => {
     const g: Record<string, Transaction[]> = {};
-    listForGroup.forEach(t => {
-      const label = humanDate(t.date);
+    listForGroup.forEach(tx => {
+      const label = humanDate(tx.date, todayLabel, yesterdayLabel);
       if (!g[label]) g[label] = [];
-      g[label].push(t);
+      g[label].push(tx);
     });
     const rows = Object.entries(g)
       .sort((a, b) => {
@@ -337,25 +384,25 @@ export default function FinancePage() {
         return [label, txs] as [string, Transaction[]];
       });
     return rows;
-  }, [listForGroup, filters.sort]);
+  }, [listForGroup, filters.sort, todayLabel, yesterdayLabel, i18n.language]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const getCatInfo = (tx: Transaction) => categories.find(c => c.name === tx.category);
 
   const prevMonth = () => {
-    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
-    else setViewMonth(m => m - 1);
+    if (selectedMonth === 0) { setSelectedYear(y => y - 1); setSelectedMonth(11); }
+    else setSelectedMonth(m => m - 1);
   };
   const nextMonth = () => {
-    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
-    else setViewMonth(m => m + 1);
+    if (selectedMonth === 11) { setSelectedYear(y => y + 1); setSelectedMonth(0); }
+    else setSelectedMonth(m => m + 1);
   };
 
   const handleDeleteTx = async (id: string) => {
     if (!userId) return;
     const ok = await deleteTransaction(userId, id);
     if (ok) {
-      toast.success('İşlem silindi');
+      toast.success(t('finance.delete_success'));
       void loadTransactions();
       if (searchQuery.length >= 2) void searchTransactions(searchQuery);
     }
@@ -371,13 +418,13 @@ export default function FinancePage() {
       {/* ── Header + search (sticky) ───────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-background">
         <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">Gelir & Gider</h1>
+          <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">{t('finance.title')}</h1>
           <div className="flex gap-3">
             <button
               type="button"
               onClick={() => setShowSearch(s => !s)}
               className="p-1.5 rounded-full active:bg-muted"
-              aria-label="Ara"
+              aria-label={t('common.search')}
             >
               <Search size={22} className="text-gray-600 dark:text-muted-foreground" />
             </button>
@@ -392,14 +439,14 @@ export default function FinancePage() {
                 type="search"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="İşlem veya kategori ara..."
+                placeholder={t('finance.search_placeholder')}
                 className="w-full border border-gray-200 dark:border-border rounded-2xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:border-blue-400 bg-gray-50 dark:bg-muted"
               />
               <button
                 type="button"
                 onClick={closeSearch}
                 className="absolute right-4 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground"
-                aria-label="Aramayı kapat"
+                aria-label={t('finance.close_search')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -412,17 +459,20 @@ export default function FinancePage() {
       <>
       {/* ── Balance Card ───────────────────────────────────────────────── */}
       <div className="mx-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 mb-4">
+        <p className="text-xs font-medium text-muted-foreground mb-2">{t('finance.monthly_summary')}</p>
         {/* Month navigator */}
         <div className="flex items-center justify-between mb-3">
           <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full active:bg-muted">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-sm font-semibold">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+          <span className="text-sm font-semibold">
+            {getMonthName(new Date(selectedYear, selectedMonth, 1))}
+          </span>
           <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full active:bg-muted">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-xs font-medium text-muted-foreground mb-1">Aylık Bakiye</p>
+        <p className="text-xs font-medium text-muted-foreground mb-1">{t('finance.balance_this_month')}</p>
         {txLoading ? (
           <div className="h-8 w-32 bg-muted rounded-lg animate-pulse mb-3" />
         ) : (
@@ -430,34 +480,36 @@ export default function FinancePage() {
             "text-2xl font-bold mb-3",
             balance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
           )}>
-            {balance >= 0 ? '+' : ''}{balance.toLocaleString('tr-TR')} {currencySymbol}
+            {balance >= 0 ? '+' : ''}{balance.toLocaleString(locale)} {currencySymbol}
           </p>
         )}
         <div className="flex gap-2 flex-wrap">
           <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-success/10 text-green-600 dark:text-green-400">
-            Gelir: +{totalIncome.toLocaleString('tr-TR')} {currencySymbol}
+            {t('finance.income_this_month')}: +{totalIncome.toLocaleString(locale)} {currencySymbol}
           </span>
           <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-destructive/10 text-red-600 dark:text-red-400">
-            Gider: -{totalExpense.toLocaleString('tr-TR')} {currencySymbol}
+            {t('finance.expense_this_month')}: -{totalExpense.toLocaleString(locale)} {currencySymbol}
           </span>
         </div>
       </div>
 
       {/* ── AI Suggestion ──────────────────────────────────────────────── */}
-      {(aiLoading || aiSuggestion !== null) && (
+      {(aiLoading || aiSuggestion !== null || aiAttempted) && (
       <div className="mx-4 mb-4 bg-gradient-to-r from-[hsl(227,47%,45%)] to-[hsl(263,55%,50%)] rounded-2xl p-4 text-white">
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold opacity-80 mb-1">Yapay Zeka Önerisi</p>
+            <p className="text-xs font-semibold opacity-80 mb-1">{t('finance.ai_suggestion_title')}</p>
             {aiLoading ? (
               <p className="text-sm opacity-80 flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Zeeky analiz ediyor...
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('finance.ai_suggestion_loading')}
               </p>
-            ) : (
+            ) : aiSuggestion ? (
               <p className="text-sm leading-snug">{aiSuggestion}</p>
+            ) : (
+              <p className="text-sm opacity-80">{t('finance.ai_suggestion_empty')}</p>
             )}
           </div>
         </div>
@@ -466,7 +518,7 @@ export default function FinancePage() {
             onClick={() => { void fetchAiSuggestion(); }}
             className="text-xs opacity-70 flex items-center gap-1"
           >
-            Yenile <ArrowRight className="w-3 h-3" />
+            {t('finance.refresh')} <ArrowRight className="w-3 h-3" />
           </button>
         </div>
       </div>
@@ -475,7 +527,7 @@ export default function FinancePage() {
       {/* ── Charts ─────────────────────────────────────────────────────── */}
       <div className="mx-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold">İstatistikler</h2>
+          <h2 className="text-sm font-semibold">{t('finance.statistics')}</h2>
           <div className="flex bg-muted rounded-lg p-0.5">
             {(['weekly', 'monthly', 'yearly'] as Period[]).map(p => (
               <button
@@ -486,7 +538,7 @@ export default function FinancePage() {
                   period === p ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
                 )}
               >
-                {p === 'weekly' ? 'Haftalık' : p === 'monthly' ? 'Aylık' : 'Yıllık'}
+                {p === 'weekly' ? t('finance.weekly') : p === 'monthly' ? t('finance.monthly') : t('finance.yearly')}
               </button>
             ))}
           </div>
@@ -496,6 +548,10 @@ export default function FinancePage() {
           {chartLoading ? (
             <div className="h-[180px] flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : chartHasNoData ? (
+            <div className="h-[180px] flex items-center justify-center">
+              <p className="text-sm text-muted-foreground">{t('finance.no_data_chart')}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={180}>
@@ -513,9 +569,9 @@ export default function FinancePage() {
                   width={40}
                   tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
                 />
-                <Tooltip formatter={(v: number) => `${v.toLocaleString('tr-TR')} ${currencySymbol}`} />
-                <Bar dataKey="gelir" fill="hsl(142,71%,45%)"  radius={[4, 4, 0, 0]} name="Gelir" />
-                <Bar dataKey="gider" fill="hsl(0,84%,60%)"    radius={[4, 4, 0, 0]} name="Gider" />
+                <Tooltip formatter={(v: number) => `${v.toLocaleString(locale)} ${currencySymbol}`} />
+                <Bar dataKey="gelir" fill="hsl(142,71%,45%)"  radius={[4, 4, 0, 0]} name={t('finance.chart_income')} />
+                <Bar dataKey="gider" fill="hsl(0,84%,60%)"    radius={[4, 4, 0, 0]} name={t('finance.chart_expense')} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -523,9 +579,9 @@ export default function FinancePage() {
 
         {/* Pie chart */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4">
-          <p className="text-xs font-semibold text-muted-foreground mb-3">Gider Dağılımı</p>
+          <p className="text-xs font-semibold text-muted-foreground mb-3">{t('finance.expense_distribution')}</p>
           {pieData.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">Bu ay harcama kaydı yok</p>
+            <p className="text-xs text-muted-foreground text-center py-4">{t('finance.no_expense')}</p>
           ) : (
             <div className="flex items-center gap-4">
               <div className="w-32 h-32 flex-shrink-0">
@@ -534,7 +590,7 @@ export default function FinancePage() {
                     <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={54} paddingAngle={2}>
                       {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number) => `${v.toLocaleString('tr-TR')} ${currencySymbol}`} />
+                    <Tooltip formatter={(v: number) => `${v.toLocaleString(locale)} ${currencySymbol}`} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -542,8 +598,8 @@ export default function FinancePage() {
                 {pieData.map(d => (
                   <div key={d.name} className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
-                    <span className="text-xs text-muted-foreground flex-1 truncate">{d.name}</span>
-                    <span className="text-xs font-medium">{d.value.toLocaleString('tr-TR')} {currencySymbol}</span>
+                    <span className="text-xs text-muted-foreground flex-1 truncate">{translateFinanceCategory(t, d.name)}</span>
+                    <span className="text-xs font-medium">{d.value.toLocaleString(locale)} {currencySymbol}</span>
                   </div>
                 ))}
               </div>
@@ -557,7 +613,7 @@ export default function FinancePage() {
       {/* ── Transactions list ───────────────────────────────────────────── */}
       <div className="mx-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold">İşlemler</h2>
+          <h2 className="text-sm font-semibold">{t('finance.transactions')}</h2>
           {!searchActive && (
             <button
               onClick={() => setShowFilters(true)}
@@ -573,15 +629,12 @@ export default function FinancePage() {
           )}
         </div>
 
-        {searchActive && (
+          {searchActive && (
           <p className="text-xs text-muted-foreground mb-2">
-            {searchLoading ? (
-              'Aranıyor…'
-            ) : (
-              <>
-                <span className="font-semibold text-foreground">{searchResults.length}</span> sonuç bulundu
-              </>
-            )}
+            {searchLoading
+              ? t('finance.searching')
+              : t('finance.results_count', { count: searchResults.length })
+            }
           </p>
         )}
 
@@ -592,7 +645,7 @@ export default function FinancePage() {
             </div>
           ) : searchResults.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-sm text-muted-foreground">Sonuç bulunamadı</p>
+              <p className="text-sm text-muted-foreground">{t('finance.no_results')}</p>
             </div>
           ) : (
           <div className="space-y-4">
@@ -622,8 +675,15 @@ export default function FinancePage() {
                               <HighlightMatch text={tx.title} query={searchQuery} />
                             </p>
                             <p className="text-[10px] text-muted-foreground truncate">
-                              <HighlightMatch text={tx.category} query={searchQuery} />
-                              <span className="opacity-70"> · {humanDate(tx.date)}</span>
+                              <HighlightMatch
+                                text={
+                                  tx.subcategory
+                                    ? `${translateFinanceCategory(t, tx.category)} · ${getSubcategory(tx.category, tx.subcategory)}`
+                                    : translateFinanceCategory(t, tx.category)
+                                }
+                                query={searchQuery}
+                              />
+                              <span className="opacity-70"> · {humanDate(tx.date, todayLabel, yesterdayLabel)}</span>
                             </p>
                           </div>
                           {tx.frequency !== 'none' && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
@@ -631,7 +691,7 @@ export default function FinancePage() {
                             "text-sm font-semibold flex-shrink-0",
                             tx.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
                           )}>
-                            {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString('tr-TR')} {currencySymbol}
+                            {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString(locale)} {currencySymbol}
                           </span>
                         </div>
                       </SwipeableCard>
@@ -650,7 +710,7 @@ export default function FinancePage() {
           ) : filteredTx.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">💸</p>
-              <p className="text-sm text-muted-foreground">Bu ay için işlem yok</p>
+              <p className="text-sm text-muted-foreground">{t('finance.no_transactions')}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -680,8 +740,15 @@ export default function FinancePage() {
                                 <HighlightMatch text={tx.title} query={searchQuery} />
                               </p>
                               <p className="text-[10px] text-muted-foreground truncate">
-                                <HighlightMatch text={tx.category} query={searchQuery} />
-                                <span className="opacity-70"> · {humanDate(tx.date)}</span>
+                                <HighlightMatch
+                                text={
+                                  tx.subcategory
+                                    ? `${translateFinanceCategory(t, tx.category)} · ${getSubcategory(tx.category, tx.subcategory)}`
+                                    : translateFinanceCategory(t, tx.category)
+                                }
+                                query={searchQuery}
+                              />
+                                <span className="opacity-70"> · {humanDate(tx.date, todayLabel, yesterdayLabel)}</span>
                               </p>
                             </div>
                             {tx.frequency !== 'none' && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
@@ -689,7 +756,7 @@ export default function FinancePage() {
                               "text-sm font-semibold flex-shrink-0",
                               tx.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
                             )}>
-                              {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString('tr-TR')} {currencySymbol}
+                              {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString(locale)} {currencySymbol}
                             </span>
                           </div>
                         </SwipeableCard>
@@ -718,7 +785,7 @@ export default function FinancePage() {
           currencySymbol={currencySymbol}
           currencyCode={currencyCode}
           onClose={() => setShowAdd(false)}
-          onSaved={() => { setShowAdd(false); void loadTransactions(); void invalidateAndRefreshAdvice(); toast.success('İşlem eklendi ✅'); }}
+          onSaved={() => { setShowAdd(false); void loadTransactions(); void invalidateAndRefreshAdvice(); toast.success(t('finance.add_success')); }}
         />
       )}
 
@@ -738,7 +805,7 @@ export default function FinancePage() {
             if (!userId) return false;
             const ok = await deleteTransaction(userId, id, opts);
             if (ok) {
-              toast.success('İşlem silindi');
+              toast.success(t('finance.delete_success'));
               void loadTransactions();
               if (searchQuery.length >= 2) void searchTransactions(searchQuery);
             }
@@ -758,10 +825,10 @@ export default function FinancePage() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-card rounded-2xl p-6 mx-8 shadow-xl" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-center mb-4">Bu işlemi silmek istediğine emin misin?</p>
+            <p className="text-sm font-medium text-center mb-4">{t('finance.delete_confirm')}</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">İptal</button>
-              <button onClick={() => handleDeleteTx(deleteConfirm)} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-semibold text-sm">Sil</button>
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">{t('finance.cancel')}</button>
+              <button onClick={() => handleDeleteTx(deleteConfirm)} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-semibold text-sm">{t('finance.delete')}</button>
             </div>
           </div>
         </div>
@@ -773,14 +840,14 @@ export default function FinancePage() {
 // ── Static category / subcategory maps ───────────────────────────────────────
 
 const INCOME_SUBS: Record<string, string[]> = {
-  'Maaş':        ['Aylık Maaş', 'İkramiye', 'Prim', 'Fazla Mesai'],
-  'Freelance':   ['Proje Bazlı', 'Danışmanlık', 'Yazarlık', 'Tasarım', 'Yazılım'],
-  'Yatırım':     ['Hisse Senedi', 'Kripto', 'Gayrimenkul', 'Fon', 'Faiz', 'Temettü'],
-  'Kira Geliri': ['Konut Kirası', 'İşyeri Kirası', 'Araç Kirası'],
-  'Emeklilik':   ['Emekli Maaşı', 'BES'],
-  'Burs':        ['Devlet Bursu', 'Özel Burs', 'Yurt Dışı Burs'],
-  'Yan Gelir':   ['Satış', 'Komisyon', 'Telif', 'Reklam Geliri'],
-  'Diğer Gelir': ['Hediye', 'Miras', 'Piyango', 'Diğer'],
+  'Maaş':        ['Düzenli Maaş', 'Prim / Bonus', 'Fazla Mesai'],
+  'Freelance':   ['Proje Bazlı', 'Danışmanlık', 'Tasarım', 'İçerik / Yazarlık'],
+  'Yatırım':     ['Hisse Senedi', 'Kripto', 'Fon', 'Temettü'],
+  'Kira Geliri': ['Daire Kirası', 'Araç Kirası', 'Diğer Kira'],
+  'Emeklilik':   ['Devlet Emekliliği', 'Özel Emeklilik'],
+  'Burs':        ['Devlet Bursu', 'Özel Burs'],
+  'Yan Gelir':   ['E-ticaret', 'Sosyal Medya', 'Özel Ders', 'Diğer Yan Gelir'],
+  'Diğer Gelir': ['Hediye / Bağış', 'Satış Geliri', 'Diğer'],
 };
 
 const EXPENSE_SUBS: Record<string, string[]> = {
@@ -798,6 +865,7 @@ const EXPENSE_SUBS: Record<string, string[]> = {
   'Seyahat':          ['Konaklama', 'Uçak Bileti', 'Tur', 'Vize', 'Seyahat Sigortası', 'Aktivite'],
   'Hediye':           ['Doğum Günü', 'Düğün', 'Yılbaşı', 'Bebek Hediyesi', 'Diğer Hediye'],
   'Sigorta':          ['Sağlık Sigortası', 'Araç Sigortası', 'Konut Sigortası', 'Hayat Sigortası'],
+  'Alışveriş':        ['Giyim', 'Elektronik', 'Ev Eşyası', 'Online', 'Diğer'],
   'Diğer Gider':      ['Bağış', 'Para Cezası', 'Kayıp & Hasar', 'Diğer'],
 };
 
@@ -813,9 +881,12 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
   onClose:  () => void;
   onSaved:  () => void;
 }) {
+  const { t } = useTranslation();
+  const fieldCls = 'w-full bg-muted rounded-xl px-4 py-3 text-sm outline-none border border-border';
   const [type,        setType]        = useState<'income' | 'expense'>('expense');
   const [amount,      setAmount]      = useState('');
   const [title,       setTitle]       = useState('');
+  const [description, setDescription] = useState('');
   const [category,    setCategory]    = useState('');
   const [subcategory, setSubcategory] = useState('');
   const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10));
@@ -826,8 +897,8 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
   const subs = category ? (type === 'income' ? INCOME_SUBS[category] : EXPENSE_SUBS[category]) ?? [] : [];
 
   const handleSave = async () => {
-    if (!amount || !category) { toast.error('Tutar ve kategori zorunlu'); return; }
-    if (!userId) { toast.error('Oturum yok'); return; }
+    if (!amount || !category) { toast.error(t('finance.error_amount_category')); return; }
+    if (!userId) { toast.error(t('finance.error_no_session')); return; }
     setSaving(true);
     const ok = await addTransaction(userId, {
       type,
@@ -838,11 +909,11 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
       subcategory: subcategory || null,
       transaction_date: new Date(`${date}T12:00:00`).toISOString(),
       frequency,
-      description: title.trim() || undefined,
+      description: description.trim() || undefined,
     });
     setSaving(false);
     if (ok) onSaved();
-    else toast.error('Kaydedilemedi');
+    else toast.error(t('finance.error_save_failed'));
   };
 
   return (
@@ -853,46 +924,62 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold">İşlem Ekle</h3>
-          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+          <h3 className="font-semibold">{t('finance.add_transaction')}</h3>
+          <button type="button" onClick={onClose} aria-label={t('common.close')}><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
 
         {/* Type toggle */}
         <div className="flex bg-muted rounded-xl p-1 mb-4">
           <button
-            onClick={() => { setType('income'); setCategory(''); setSubcategory(''); }}
+            type="button"
+            onClick={() => { setType('income'); setCategory(''); setSubcategory(''); setTitle(''); setDescription(''); }}
             className={cn("flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors", type === 'income' ? "bg-success text-white" : "text-muted-foreground")}
-          >Gelir</button>
+          >{t('finance.income')}</button>
           <button
-            onClick={() => { setType('expense'); setCategory(''); setSubcategory(''); }}
+            type="button"
+            onClick={() => { setType('expense'); setCategory(''); setSubcategory(''); setTitle(''); setDescription(''); }}
             className={cn("flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors", type === 'expense' ? "bg-destructive text-white" : "text-muted-foreground")}
-          >Gider</button>
+          >{t('finance.expense')}</button>
         </div>
 
-        {/* Amount */}
-        <div className="flex items-center justify-center gap-1 mb-4">
+        <div className="mb-3">
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t('finance.form.title')}</label>
           <input
-            type="number"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder="0"
-            className="text-4xl font-bold text-center w-40 bg-transparent outline-none"
+            type="text"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder={t('finance.form.title_placeholder')}
+            className={fieldCls}
           />
-          <span className="text-2xl font-bold text-muted-foreground">{currencySymbol}</span>
+        </div>
+
+        <div className="mb-4">
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t('finance.form.amount')}</label>
+          <div className="flex items-center justify-center gap-1">
+            <input
+              type="number"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder={t('finance.form.amount_placeholder')}
+              className="text-4xl font-bold text-center w-40 bg-transparent outline-none"
+            />
+            <span className="text-2xl font-bold text-muted-foreground">{currencySymbol}</span>
+          </div>
         </div>
 
         {/* Categories */}
-        <p className="text-xs font-medium text-muted-foreground mb-2">Kategori</p>
+        <p className="text-xs font-medium text-muted-foreground mb-2">{t('finance.form.category')}</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {cats.map(name => (
             <button
               key={name}
+              type="button"
               onClick={() => { setCategory(name); setSubcategory(''); }}
               className={cn(
                 "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
                 category === name ? "bg-accent text-accent-foreground border-accent" : "bg-muted text-muted-foreground border-transparent"
               )}
-            >{name}</button>
+            >{translateFinanceCategory(t, name)}</button>
           ))}
         </div>
 
@@ -900,61 +987,78 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
         {subs.length > 0 && (
           <div className="mb-4">
             <p className="text-xs font-medium text-muted-foreground mb-2">
-              Alt Kategori <span className="text-[10px] opacity-60">(isteğe bağlı)</span>
+              {t('finance.subcategory')} <span className="text-[10px] opacity-60">{t('finance.optional')}</span>
             </p>
             <div className="flex flex-wrap gap-2">
               {subs.map(s => (
                 <button
                   key={s}
+                  type="button"
                   onClick={() => setSubcategory(subcategory === s ? '' : s)}
                   className={cn(
                     "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
                     subcategory === s ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"
                   )}
-                >{s}</button>
+                >{getSubcategory(category, s)}</button>
               ))}
             </div>
           </div>
         )}
 
-        <input
-          type="text"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Açıklama (isteğe bağlı)"
-          className="w-full bg-muted rounded-xl px-4 py-3 text-sm outline-none border border-border mb-3"
-        />
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          className="w-full bg-muted rounded-xl px-4 py-3 text-sm outline-none border border-border mb-3"
-        />
+        <div className="mb-3">
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t('finance.form.description')}</label>
+          <input
+            type="text"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder={t('finance.description_placeholder')}
+            className={fieldCls}
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t('finance.form.date')}</label>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className={fieldCls}
+          />
+        </div>
 
         {/* Frequency */}
-        <p className="text-xs font-medium text-muted-foreground mb-2">Tekrar</p>
-        <div className="flex gap-2 mb-5">
+        <p className="text-xs font-medium text-muted-foreground mb-2">{t('finance.frequency')}</p>
+        <div className="flex gap-2 mb-5 flex-wrap">
           {(['none', 'daily', 'weekly', 'monthly'] as Recurrence[]).map(r => (
             <button
               key={r}
+              type="button"
               onClick={() => setFrequency(r)}
               className={cn(
                 "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
                 frequency === r ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"
               )}
             >
-              {r === 'none' ? 'Yok' : r === 'daily' ? 'Günlük' : r === 'weekly' ? 'Haftalık' : 'Aylık'}
+              {r === 'none' ? t('finance.freq_none') : r === 'daily' ? t('finance.freq_daily') : r === 'weekly' ? t('finance.weekly') : t('finance.monthly')}
             </button>
           ))}
         </div>
 
         <button
+          type="button"
           onClick={handleSave}
           disabled={saving}
-          className="w-full py-3.5 bg-accent text-accent-foreground rounded-xl font-semibold text-sm active:scale-[0.97] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+          className="w-full py-3.5 bg-accent text-accent-foreground rounded-xl font-semibold text-sm active:scale-[0.97] transition-transform disabled:opacity-60 flex items-center justify-center gap-2 mb-2"
         >
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-          Kaydet
+          {t('common.save')}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-3 rounded-xl bg-muted text-muted-foreground font-semibold text-sm"
+        >
+          {t('common.cancel')}
         </button>
       </div>
     </div>

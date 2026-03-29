@@ -7,29 +7,44 @@ import { useChatStore } from '@/store/useChatStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useLanguageStore } from '@/store/useLanguageStore';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import WeeklySummaryPage from '@/pages/WeeklySummaryPage';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-const zeekyChatUrl    = 'https://gmcmreinpnhuszxlpgpj.supabase.co/functions/v1/zeeky-chat';
+const zeekyChatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-chat`;
+
+const CHAT_FETCH_MS = 30_000;
+
+function assistantErrorContent(language: string, kind: 'timeout' | 'connection' | 'empty'): string {
+  if (language === 'en') {
+    if (kind === 'timeout') return 'Sorry, the response took too long. Please try again.';
+    if (kind === 'empty') return 'Sorry, I could not generate a response. Please try again.';
+    return 'A connection error occurred. Please try again.';
+  }
+  if (language === 'fr') {
+    if (kind === 'timeout') return 'Désolé, la réponse a pris trop de temps. Veuillez réessayer.';
+    if (kind === 'empty') return 'Désolé, je n\'ai pas pu générer de réponse. Veuillez réessayer.';
+    return 'Une erreur de connexion s\'est produite. Veuillez réessayer.';
+  }
+  if (kind === 'timeout') return 'Üzgünüm, yanıt çok uzun sürdü. Lütfen tekrar dene.';
+  if (kind === 'empty') return 'Üzgünüm, yanıt üretemedim. Lütfen tekrar dene.';
+  return 'Bağlantı hatası oluştu. Lütfen tekrar dene.';
+}
 
 const BOTTOM_NAV_HEIGHT = 64;
 const TOP_BAR_HEIGHT = 60;
 const INPUT_ROW_HEIGHT = 60;
 
-const placeholders = [
-  'Bugün ne yaptın?',
-  'Zeeky ile sohbet et...',
-  'Kendini nasıl hissediyorsun?',
-  'Bugün neler geçti?',
-  'Bir şeyler anlat...',
-  'Hedeflerini konuşalım mı?',
-];
-
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Günaydın';
-  if (h < 18) return 'İyi günler';
-  return 'İyi akşamlar';
+function buildWelcomeMessage(translate: TFunction, userFirstName: string): string {
+  const hour = new Date().getHours();
+  const timeKey = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+  const name = userFirstName.trim();
+  if (name) {
+    return translate(`home.initial_message_${timeKey}_named`, { name });
+  }
+  return translate(`home.initial_message_${timeKey}`);
 }
 
 /** DB desc+limit ile gelen satırları kronolojik sıraya çevir (reverse yerine sort). */
@@ -62,6 +77,8 @@ export default function HomePage() {
 
   const { unreadCount, setUnreadCount } = useNotificationStore();
   const refreshActivities = useActivityRefresh(s => s.refresh);
+  const { language } = useLanguageStore();
+  const { t, i18n } = useTranslation();
 
   const [userName,         setUserName]         = useState('');
   const [inputText,        setInputText]        = useState('');
@@ -79,7 +96,24 @@ export default function HomePage() {
   const loadingOlderRef = useRef(false);
   const prevMessageCountRef = useRef(0);
 
-  const todayDate = new Date().toLocaleDateString('tr-TR', {
+  const placeholders = [
+    t('home.placeholder_1'),
+    t('home.placeholder_2'),
+    t('home.placeholder_3'),
+    t('home.placeholder_4'),
+    t('home.placeholder_5'),
+    t('home.placeholder_6'),
+  ];
+
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return t('home.greeting_morning');
+    if (h < 18) return t('home.greeting_afternoon');
+    return t('home.greeting_evening');
+  };
+
+  const locale = i18n.language === 'fr' ? 'fr-FR' : i18n.language === 'en' ? 'en-GB' : 'tr-TR';
+  const todayDate = new Date().toLocaleDateString(locale, {
     weekday: 'long', day: 'numeric', month: 'long',
   });
 
@@ -155,7 +189,7 @@ export default function HomePage() {
         setMessages([{
           id: 'welcome',
           role: 'assistant',
-          content: 'Merhaba! Ben Zeeky. Bugün nasıl geçti? ✨',
+          content: buildWelcomeMessage(t, userName),
           created_at: new Date().toISOString(),
         }]);
       }
@@ -183,7 +217,16 @@ export default function HomePage() {
 
     setHasMore(data.length === 20);
     setLoaded(true);
-  }, [setMessages, prependMessages, setHasMore, setLoaded, userId]);
+  }, [setMessages, prependMessages, setHasMore, setLoaded, userId, t, userName]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const msgs = useChatStore.getState().messages;
+    if (msgs.length !== 1 || msgs[0].id !== 'welcome') return;
+    const content = buildWelcomeMessage(t, userName);
+    if (msgs[0].content === content) return;
+    setMessages([{ ...msgs[0], content }]);
+  }, [language, userName, isLoaded, t, setMessages]);
 
   // Load on mount
   useEffect(() => {
@@ -276,16 +319,34 @@ export default function HomePage() {
         .single();
       const personality = profileData?.ai_personality || 'balanced';
 
-      const response = await fetch(zeekyChatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-          'apikey': supabaseAnonKey,
-        },
-        body: JSON.stringify({ message: userMessage, user_id: userId, personality }),
-      });
-      const data = await response.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CHAT_FETCH_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(zeekyChatUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'apikey': supabaseAnonKey,
+          },
+          body: JSON.stringify({ message: userMessage, user_id: userId, personality, language }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        reply?: string;
+        extracted_data?: { activities?: Array<{ people?: string[] }>; has_activity?: boolean; has_transaction?: boolean; transactions?: unknown };
+      };
+
       console.log('Zeeky full response:', JSON.stringify(data));
       console.log('Extracted data:', data.extracted_data);
       console.log('Has activity:', data.extracted_data?.has_activity);
@@ -293,36 +354,48 @@ export default function HomePage() {
       console.log('Has transaction:', data.extracted_data?.has_transaction);
       console.log('Transactions:', data.extracted_data?.transactions);
 
-      addMessage({
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: (data.reply as string | undefined) || 'Bir sorun oluştu, tekrar dene.',
-        created_at: new Date().toISOString(),
-      });
+      const reply = typeof data.reply === 'string' ? data.reply : '';
+      if (reply.trim()) {
+        addMessage({
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: reply,
+          created_at: new Date().toISOString(),
+        });
 
-      if (data.extracted_data?.activities) {
-        for (const activity of data.extracted_data.activities as Array<{ people?: string[] }>) {
-          if (activity.people && activity.people.length > 0) {
-            for (const personName of activity.people) {
-              await findOrCreateFriend(userId, personName);
+        if (data.extracted_data?.activities) {
+          for (const activity of data.extracted_data.activities as Array<{ people?: string[] }>) {
+            if (activity.people && activity.people.length > 0) {
+              for (const personName of activity.people) {
+                await findOrCreateFriend(userId, personName);
+              }
             }
           }
         }
-      }
 
-      // Edge Function persists activities/transactions; refresh lists that depend on useActivityRefresh
-      refreshActivities();
-    } catch {
+        refreshActivities();
+      } else {
+        addMessage({
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: assistantErrorContent(language, 'empty'),
+          created_at: new Date().toISOString(),
+        });
+      }
+    } catch (err: unknown) {
+      const isAbort =
+        (err instanceof Error && err.name === 'AbortError') ||
+        (err instanceof DOMException && err.name === 'AbortError');
       addMessage({
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Bağlantı hatası, tekrar dene.',
+        content: assistantErrorContent(language, isAbort ? 'timeout' : 'connection'),
         created_at: new Date().toISOString(),
       });
     } finally {
       setIsChatLoading(false);
     }
-  }, [addMessage, refreshActivities, userId]);
+  }, [addMessage, refreshActivities, userId, language]);
 
   const handleSend = useCallback(() => {
     const text = inputText.trim();
@@ -557,8 +630,8 @@ export default function HomePage() {
             <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
               <div className="w-5 h-5 rounded-full bg-red-500" />
             </div>
-            <p className="text-sm font-semibold text-gray-800">Dinliyorum...</p>
-            <p className="text-xs text-gray-400">Konuşmayı bitirmek için bırakın</p>
+          <p className="text-sm font-semibold text-gray-800">{t('home.listening')}</p>
+          <p className="text-xs text-gray-400">{t('home.listening_hint')}</p>
           </div>
         </div>
       )}

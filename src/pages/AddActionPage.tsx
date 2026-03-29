@@ -8,41 +8,44 @@ import { useActivityRefresh } from '@/store/useActivityRefresh';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { FriendAutocomplete } from '@/components/FriendAutocomplete';
+import { useTranslation } from 'react-i18next';
+import { useLanguageStore } from '@/store/useLanguageStore';
+import { formatDate } from '@/lib/dateLocale';
 
-// ── Category definitions ─────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: 'sağlık-spor', emoji: '🏃', label: 'Sağlık & Spor', desc: 'Koşu, yüzme, doktor...',      color: '#22c55e' },
-  { id: 'sosyal',      emoji: '👥', label: 'Sosyal',         desc: 'Arkadaş, aile, buluşma...',  color: '#3b82f6' },
-  { id: 'iş-eğitim',  emoji: '💼', label: 'İş & Eğitim',   desc: 'Çalışma, toplantı, kurs...',  color: '#6366f1' },
-  { id: 'eğlence',    emoji: '🎬', label: 'Eğlence',        desc: 'Sinema, dizi, konser...',      color: '#ec4899' },
-  { id: 'alışveriş',  emoji: '🛒', label: 'Alışveriş',      desc: 'Market, giyim, teknoloji...', color: '#f97316' },
-  { id: 'yeme-içme',  emoji: '🍽️', label: 'Yeme & İçme',   desc: 'Restoran, kafe, ev yemeği...', color: '#ef4444' },
-  { id: 'seyahat',    emoji: '✈️', label: 'Seyahat',        desc: 'Gezi, tatil, şehir dışı...',  color: '#0ea5e9' },
-  { id: 'ev-yaşam',   emoji: '🏠', label: 'Ev & Yaşam',    desc: 'Tadilat, temizlik, bakım...', color: '#84cc16' },
-  { id: 'diğer',      emoji: '📦', label: 'Diğer',          desc: 'Kategoriye uymayan...',        color: '#94a3b8' },
+// ── Category definitions (ids & meta stay outside for TypeScript inference) ──
+const CATEGORY_META = [
+  { id: 'sağlık-spor', emoji: '🏃', labelKey: 'add_action.categories.health', descKey: 'add_action.categories.health_desc', color: '#22c55e' },
+  { id: 'sosyal',      emoji: '👥', labelKey: 'add_action.categories.social', descKey: 'add_action.categories.social_desc', color: '#3b82f6' },
+  { id: 'iş-eğitim',  emoji: '💼', labelKey: 'add_action.categories.work',   descKey: 'add_action.categories.work_desc',   color: '#6366f1' },
+  { id: 'eğlence',    emoji: '🎬', labelKey: 'add_action.categories.entertainment', descKey: 'add_action.categories.entertainment_desc', color: '#ec4899' },
+  { id: 'alışveriş',  emoji: '🛒', labelKey: 'add_action.categories.shopping', descKey: 'add_action.categories.shopping_desc', color: '#f97316' },
+  { id: 'yeme-içme',  emoji: '🍽️', labelKey: 'add_action.categories.food',   descKey: 'add_action.categories.food_desc',   color: '#ef4444' },
+  { id: 'seyahat',    emoji: '✈️', labelKey: 'add_action.categories.travel',  descKey: 'add_action.categories.travel_desc',  color: '#0ea5e9' },
+  { id: 'ev-yaşam',   emoji: '🏠', labelKey: 'add_action.categories.home',   descKey: 'add_action.categories.home_desc',   color: '#84cc16' },
+  { id: 'diğer',      emoji: '📦', labelKey: 'add_action.categories.other',  descKey: 'add_action.categories.other_desc',  color: '#94a3b8' },
 ] as const;
 
-type CategoryId = typeof CATEGORIES[number]['id'];
+type CategoryId = typeof CATEGORY_META[number]['id'];
 
 const EXPENSE_SUBCATS = ['Yiyecek', 'Ulaşım', 'Eğlence', 'Faturalar', 'Sağlık', 'Giyim', 'Teknoloji', 'Diğer'];
 
-const TITLE_PLACEHOLDERS: Record<CategoryId, string> = {
-  'sağlık-spor': 'Ör: 45 dk koşu yaptım',
-  'sosyal':      'Ör: Ali ile buluştum',
-  'iş-eğitim':  'Ör: Proje toplantısı',
-  'eğlence':    'Ör: Sinemaya gittim',
-  'alışveriş':  'Ör: Market alışverişi',
-  'yeme-içme':  'Ör: Öğle yemeği',
-  'seyahat':    'Ör: İstanbul\'a gittim',
-  'ev-yaşam':   'Ör: Ev temizliği',
-  'diğer':      'Ne yaptın?',
+const TITLE_PLACEHOLDER_KEYS: Record<CategoryId, string> = {
+  'sağlık-spor': 'add_action.placeholder_health',
+  'sosyal':      'add_action.placeholder_social',
+  'iş-eğitim':  'add_action.placeholder_work',
+  'eğlence':    'add_action.placeholder_entertainment',
+  'alışveriş':  'add_action.placeholder_shopping',
+  'yeme-içme':  'add_action.placeholder_food',
+  'seyahat':    'add_action.placeholder_travel',
+  'ev-yaşam':   'add_action.placeholder_home',
+  'diğer':      'add_action.placeholder_other',
 };
 
 function getCat(id: string) {
-  return CATEGORIES.find(c => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1];
+  return CATEGORY_META.find(c => c.id === id) ?? CATEGORY_META[CATEGORY_META.length - 1];
 }
 
-const ALL_CATEGORY_IDS = CATEGORIES.map(c => c.id) as string[];
+const ALL_CATEGORY_IDS = CATEGORY_META.map(c => c.id) as string[];
 const LEGACY_IDS = ['gittim', 'yaptim', 'uyudum', 'izledim', 'spor', 'sağlık', 'iş'];
 const VALID_IDS = [...ALL_CATEGORY_IDS, ...LEGACY_IDS];
 
@@ -65,6 +68,8 @@ const labelCls = "text-[11px] font-semibold text-foreground/50 mb-1.5 block uppe
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AddActionPage() {
+  const { t } = useTranslation();
+  const { language } = useLanguageStore();
   const navigate       = useNavigate();
   const { user }       = useAuthStore();
   const userId         = user?.id ?? '';
@@ -75,6 +80,17 @@ export default function AddActionPage() {
   const currencySymbol = useCurrencyStore(s => s.symbol);
   const currencyCode   = useCurrencyStore(s => s.code);
   const { refresh }    = useActivityRefresh();
+
+  // ── Translated category list (re-computed when language changes) ──────────
+  const CATEGORIES = CATEGORY_META.map(c => ({
+    ...c,
+    label: t(c.labelKey),
+    desc:  t(c.descKey),
+  }));
+
+  // ── Per-category title placeholder ────────────────────────────────────────
+  const getPlaceholder = (category: string): string =>
+    t(TITLE_PLACEHOLDER_KEYS[category as CategoryId] ?? 'add_action.activity_name_placeholder_default');
 
   // ── Step management ────────────────────────────────────────────────────────
   const initialCat = (): CategoryId => {
@@ -101,6 +117,8 @@ export default function AddActionPage() {
   const [notes,           setNotes]           = useState('');
   const [expenseSubcat,   setExpenseSubcat]   = useState('');
   const [travelDays,      setTravelDays]      = useState('');
+  const [quantity,        setQuantity]        = useState('');
+  const [quantityUnit,    setQuantityUnit]    = useState('');
 
   // ── Load existing activity (edit mode) ────────────────────────────────────
   useEffect(() => {
@@ -126,6 +144,8 @@ export default function AddActionPage() {
         setLocation_(typeof data.location === 'string' ? data.location : '');
         setPeople(Array.isArray(data.people) ? (data.people as string[]) : []);
         setNotes(data.raw_message ?? '');
+        setQuantity(data.quantity != null && data.quantity !== '' ? String(data.quantity as number) : '');
+        setQuantityUnit(typeof data.quantity_unit === 'string' ? data.quantity_unit : '');
       })
       .finally(() => setLoading(false));
   }, [editId, userId]);
@@ -140,12 +160,12 @@ export default function AddActionPage() {
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!title.trim()) { toast.error('Başlık boş olamaz'); return; }
+    if (!title.trim()) { toast.error(t('add_action.error_title_empty')); return; }
     if (selCat === 'alışveriş' && !amount) {
-      toast.error('Tutar zorunludur'); return;
+      toast.error(t('add_action.error_amount_required')); return;
     }
     if (!userId) {
-      toast.error('Oturum yok');
+      toast.error(t('add_action.error_no_session'));
       return;
     }
     setSaving(true);
@@ -169,6 +189,8 @@ export default function AddActionPage() {
         created_via:  'manual' as const,
         raw_message:  notes.trim() || title.trim(),
         is_favorite:  isFavorite,
+        quantity:     selCat === 'yeme-içme' && quantity ? Number(quantity) : null,
+        quantity_unit: selCat === 'yeme-içme' ? (quantityUnit.trim() || null) : null,
       };
 
       if (isEditing && editId) {
@@ -177,10 +199,10 @@ export default function AddActionPage() {
           .update(activityPayload)
           .eq('id', editId)
           .eq('user_id', userId);
-        if (error) { console.error(error); toast.error('Kaydedilemedi'); return; }
+        if (error) { console.error(error); toast.error(t('add_action.error_save_failed')); return; }
       } else {
         const { error } = await supabase.from('activities').insert(activityPayload);
-        if (error) { console.error(error); toast.error('Kaydedilemedi'); return; }
+        if (error) { console.error(error); toast.error(t('add_action.error_save_failed')); return; }
       }
 
       // Also save to transactions for alışveriş and yeme-içme when amount is set
@@ -197,7 +219,7 @@ export default function AddActionPage() {
         });
       }
 
-      toast.success(isEditing ? 'Eylem güncellendi!' : 'Eylem eklendi!');
+      toast.success(isEditing ? t('add_action.success_updated') : t('add_action.success_added'));
       refresh();
       navigate(-1);
     } finally {
@@ -215,8 +237,8 @@ export default function AddActionPage() {
         .delete()
         .eq('id', editId)
         .eq('user_id', userId);
-      if (error) { toast.error('Silinemedi'); return; }
-      toast.success('Eylem silindi');
+      if (error) { toast.error(t('add_action.error_delete_failed')); return; }
+      toast.success(t('add_action.success_deleted'));
       refresh();
       navigate(-1);
     } finally {
@@ -247,30 +269,30 @@ export default function AddActionPage() {
           >
             <ArrowLeft className="w-4 h-4 text-foreground/60" />
           </button>
-          <h1 className="text-2xl font-bold text-foreground">Ne yaptın?</h1>
-          <p className="text-sm text-muted-foreground mt-1">Bir kategori seç</p>
+          <h1 className="text-2xl font-bold text-foreground">{t('add_action.what_did_you_do')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('add_action.select_category')}</p>
         </div>
 
         {/* Grid */}
         <div className="flex-1 px-4 pb-8 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
-            {CATEGORIES.map(cat => (
+            {CATEGORIES.map(c => (
               <button
-                key={cat.id}
+                key={c.id}
                 type="button"
-                onClick={() => handleSelectCategory(cat.id)}
+                onClick={() => handleSelectCategory(c.id)}
                 className="flex items-center gap-3 p-4 rounded-2xl border border-border bg-card active:scale-[0.97] transition-transform text-left"
-                style={{ '--cat-color': cat.color } as React.CSSProperties}
+                style={{ '--cat-color': c.color } as React.CSSProperties}
               >
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                  style={{ backgroundColor: cat.color + '18' }}
+                  style={{ backgroundColor: c.color + '18' }}
                 >
-                  {cat.emoji}
+                  {c.emoji}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground leading-tight">{cat.label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{cat.desc}</p>
+                  <p className="text-sm font-semibold text-foreground leading-tight">{c.label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{c.desc}</p>
                 </div>
               </button>
             ))}
@@ -314,8 +336,8 @@ export default function AddActionPage() {
         <div className="flex items-center gap-2">
           <span className="text-3xl">{cat.emoji}</span>
           <div>
-            <p className="text-white/70 text-xs font-medium">{isEditing ? 'Düzenleniyor' : 'Yeni eylem'}</p>
-            <p className="text-white font-bold text-lg leading-tight">{cat.label}</p>
+            <p className="text-white/70 text-xs font-medium">{isEditing ? t('add_action.editing') : t('add_action.new_action')}</p>
+            <p className="text-white font-bold text-lg leading-tight">{t(cat.labelKey)}</p>
           </div>
         </div>
       </div>
@@ -325,12 +347,12 @@ export default function AddActionPage() {
 
         {/* ── COMMON: Title ── */}
         <div>
-          <label className={labelCls}>Başlık *</label>
+          <label className={labelCls}>{t('add_action.title_label')}</label>
           <input
             type="text"
             value={title}
             onChange={e => setTitle(e.target.value)}
-            placeholder={TITLE_PLACEHOLDERS[selCat] ?? 'Ne yaptın?'}
+            placeholder={getPlaceholder(selCat)}
             className={inputCls}
             autoFocus
           />
@@ -338,33 +360,34 @@ export default function AddActionPage() {
 
         {/* ── COMMON: Date ── */}
         <div>
-          <label className={labelCls}>Tarih</label>
+          <label className={labelCls}>{t('add_action.date')}</label>
           <input
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
             className={inputCls}
           />
+          <p className="text-xs text-muted-foreground mt-1.5">{formatDate(date)}</p>
         </div>
 
         {/* ── sağlık-spor ── */}
         {selCat === 'sağlık-spor' && (
           <>
             <div>
-              <label className={labelCls}>Süre (ss:dd)</label>
+              <label className={labelCls}>{t('add_action.duration')}</label>
               <input type="time" value={minsToTime(parseInt(duration) || 0)}
                 onChange={e => setDuration(String(timeToMins(e.target.value)))}
                 className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Kalori (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.calories')}</label>
               <input type="number" value={calories} onChange={e => setCalories(e.target.value)}
-                placeholder="Ör: 320 kcal" min="0" className={inputCls} />
+                placeholder={t('add_action.calories_placeholder')} min="0" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.notes_optional')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Notlar, detaylar..." rows={2}
+                placeholder={t('add_action.notes_placeholder')} rows={2}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
@@ -374,23 +397,23 @@ export default function AddActionPage() {
         {selCat === 'sosyal' && (
           <>
             <div>
-              <label className={labelCls}>Kişiler</label>
+              <label className={labelCls}>{t('add_action.people')}</label>
               <FriendAutocomplete
                 userId={userId}
                 value={people}
                 onChange={setPeople}
-                placeholder="Kişi ara veya ekle..."
+                placeholder={t('add_action.people_placeholder')}
               />
             </div>
             <div>
-              <label className={labelCls}>Konum</label>
+              <label className={labelCls}>{t('add_action.location')}</label>
               <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder="Ör: Taksim Meydanı" className={inputCls} />
+                placeholder={t('add_action.location_placeholder')} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.notes_optional')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Notlar, detaylar..." rows={2}
+                placeholder={t('add_action.notes_placeholder')} rows={2}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
@@ -400,20 +423,20 @@ export default function AddActionPage() {
         {selCat === 'iş-eğitim' && (
           <>
             <div>
-              <label className={labelCls}>Süre (ss:dd)</label>
+              <label className={labelCls}>{t('add_action.duration')}</label>
               <input type="time" value={minsToTime(parseInt(duration) || 0)}
                 onChange={e => setDuration(String(timeToMins(e.target.value)))}
                 className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Proje / Konu</label>
+              <label className={labelCls}>{t('add_action.project')}</label>
               <input type="text" value={project} onChange={e => setProject(e.target.value)}
-                placeholder="Ör: Mobil uygulama projesi" className={inputCls} />
+                placeholder={t('add_action.project_placeholder')} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.notes_optional')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Notlar, detaylar..." rows={2}
+                placeholder={t('add_action.notes_placeholder')} rows={2}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
@@ -423,21 +446,21 @@ export default function AddActionPage() {
         {selCat === 'eğlence' && (
           <>
             <div>
-              <label className={labelCls}>Ne izledin / Ne yaptın</label>
+              <label className={labelCls}>{t('add_action.what_watched')}</label>
               <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Ör: Interstellar" className={inputCls} />
+                placeholder={t('add_action.what_watched_placeholder')} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Kişiler</label>
+              <label className={labelCls}>{t('add_action.people')}</label>
               <FriendAutocomplete
                 userId={userId}
                 value={people}
                 onChange={setPeople}
-                placeholder="Kişi ara veya ekle..."
+                placeholder={t('add_action.people_placeholder')}
               />
             </div>
             <div>
-              <label className={labelCls}>Tutar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.amount_optional')}</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
@@ -451,7 +474,7 @@ export default function AddActionPage() {
         {selCat === 'alışveriş' && (
           <>
             <div>
-              <label className={labelCls}>Tutar *</label>
+              <label className={labelCls}>{t('add_action.amount_required')}</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
@@ -459,14 +482,14 @@ export default function AddActionPage() {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Mağaza / Konum</label>
+              <label className={labelCls}>{t('add_action.store_location')}</label>
               <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder="Ör: Migros, İstiklal Cad." className={inputCls} />
+                placeholder={t('add_action.store_location_placeholder')} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.notes_optional')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Notlar, detaylar..." rows={2}
+                placeholder={t('add_action.notes_placeholder')} rows={2}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
@@ -476,31 +499,63 @@ export default function AddActionPage() {
         {selCat === 'yeme-içme' && (
           <>
             <div>
-              <label className={labelCls}>Tutar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.amount_optional')}</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
                   placeholder="0" min="0" step="0.01" className={cn(inputCls, 'pl-8')} />
               </div>
             </div>
-            <div>
-              <label className={labelCls}>Restoran / Konum</label>
-              <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder="Ör: Nusret, Beşiktaş" className={inputCls} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>
+                  {t('add_action.quantity')}
+                  <span className="text-muted-foreground font-normal normal-case tracking-normal ml-1">
+                    ({t('common.optional')})
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  value={quantity}
+                  onChange={e => setQuantity(e.target.value)}
+                  placeholder="4"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>
+                  {t('add_action.quantity_unit')}
+                  <span className="text-muted-foreground font-normal normal-case tracking-normal ml-1">
+                    ({t('common.optional')})
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={quantityUnit}
+                  onChange={e => setQuantityUnit(e.target.value)}
+                  placeholder="duble / porsiyon / bardak"
+                  className={inputCls}
+                />
+              </div>
             </div>
             <div>
-              <label className={labelCls}>Kişiler</label>
+              <label className={labelCls}>{t('add_action.restaurant_location')}</label>
+              <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
+                placeholder={t('add_action.restaurant_location_placeholder')} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>{t('add_action.people')}</label>
               <FriendAutocomplete
                 userId={userId}
                 value={people}
                 onChange={setPeople}
-                placeholder="Kişi ara veya ekle..."
+                placeholder={t('add_action.people_placeholder')}
               />
             </div>
             <div>
-              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.notes_optional')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Notlar, detaylar..." rows={2}
+                placeholder={t('add_action.notes_placeholder')} rows={2}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
@@ -510,17 +565,17 @@ export default function AddActionPage() {
         {selCat === 'seyahat' && (
           <>
             <div>
-              <label className={labelCls}>Gidilen Yer</label>
+              <label className={labelCls}>{t('add_action.destination')}</label>
               <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder="Ör: Antalya, Kapadokya" className={inputCls} />
+                placeholder={t('add_action.destination_placeholder')} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Süre (gün)</label>
+              <label className={labelCls}>{t('add_action.duration_days')}</label>
               <input type="number" value={travelDays} onChange={e => setTravelDays(e.target.value)}
-                placeholder="Ör: 3" min="1" className={inputCls} />
+                placeholder={t('add_action.travel_days_placeholder')} min="1" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Tutar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.amount_optional')}</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
@@ -528,9 +583,9 @@ export default function AddActionPage() {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Notlar (opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.notes_optional')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Notlar, detaylar..." rows={2}
+                placeholder={t('add_action.notes_placeholder')} rows={2}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
@@ -540,25 +595,25 @@ export default function AddActionPage() {
         {selCat === 'ev-yaşam' && (
           <>
             <div>
-              <label className={labelCls}>Süre (ss:dd, opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.duration_optional')}</label>
               <input type="time" value={minsToTime(parseInt(duration) || 0)}
                 onChange={e => setDuration(String(timeToMins(e.target.value)))}
                 className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Açıklama</label>
+              <label className={labelCls}>{t('add_action.description')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Ne yaptın, nasıl geçti..." rows={3}
+                placeholder={t('add_action.notes_placeholder')} rows={3}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
         )}
 
-        {/* ── harcama ── */}
+        {/* ── harcama (legacy) ── */}
         {selCat === 'harcama' && (
           <>
             <div>
-              <label className={labelCls}>Tutar *</label>
+              <label className={labelCls}>{t('add_action.amount_required')}</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
@@ -566,7 +621,7 @@ export default function AddActionPage() {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Kategori</label>
+              <label className={labelCls}>{t('add_action.category')}</label>
               <div className="flex flex-wrap gap-2">
                 {EXPENSE_SUBCATS.map(s => (
                   <button
@@ -586,9 +641,9 @@ export default function AddActionPage() {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Açıklama</label>
+              <label className={labelCls}>{t('add_action.description')}</label>
               <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Ör: Elektrik faturası" className={inputCls} />
+                placeholder={t('add_action.expense_description_placeholder')} className={inputCls} />
             </div>
           </>
         )}
@@ -597,15 +652,15 @@ export default function AddActionPage() {
         {selCat === 'diğer' && (
           <>
             <div>
-              <label className={labelCls}>Süre (ss:dd, opsiyonel)</label>
+              <label className={labelCls}>{t('add_action.duration_optional')}</label>
               <input type="time" value={minsToTime(parseInt(duration) || 0)}
                 onChange={e => setDuration(String(timeToMins(e.target.value)))}
                 className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Açıklama</label>
+              <label className={labelCls}>{t('add_action.description')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Detayları buraya yaz..." rows={3}
+                placeholder={t('add_action.notes_placeholder')} rows={3}
                 className={cn(inputCls, 'resize-none')} />
             </div>
           </>
@@ -618,7 +673,7 @@ export default function AddActionPage() {
             onClick={() => setDelConfirm(true)}
             className="w-full py-3 rounded-xl bg-destructive/10 text-destructive font-semibold text-sm active:scale-[0.98] transition-transform"
           >
-            Eylemi Sil
+            {t('add_action.delete_action')}
           </button>
         )}
       </div>
@@ -632,7 +687,7 @@ export default function AddActionPage() {
           style={{ backgroundColor: catColor }}
         >
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-          {isEditing ? 'Güncelle' : 'Kaydet'}
+          {isEditing ? t('add_action.update') : t('add_action.save')}
         </button>
       </div>
 
@@ -646,14 +701,14 @@ export default function AddActionPage() {
             className="bg-card rounded-2xl p-5 mx-4 shadow-xl w-full max-w-[400px]"
             onClick={e => e.stopPropagation()}
           >
-            <p className="text-base font-semibold text-center mb-1">Eylemi sil</p>
-            <p className="text-sm text-muted-foreground text-center mb-5">Bu eylem kalıcı olarak silinecek. Emin misin?</p>
+            <p className="text-base font-semibold text-center mb-1">{t('add_action.delete_confirm_title')}</p>
+            <p className="text-sm text-muted-foreground text-center mb-5">{t('add_action.delete_confirm_desc')}</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDelConfirm(false)}
                 className="flex-1 py-3 rounded-xl bg-muted text-muted-foreground font-semibold text-sm"
               >
-                İptal
+                {t('add_action.cancel')}
               </button>
               <button
                 onClick={handleDelete}
@@ -661,7 +716,7 @@ export default function AddActionPage() {
                 className="flex-1 py-3 rounded-xl bg-destructive text-white font-semibold text-sm disabled:opacity-60 flex items-center justify-center gap-1.5"
               >
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Sil
+                {t('common.delete')}
               </button>
             </div>
           </div>

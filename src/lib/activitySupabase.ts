@@ -92,6 +92,14 @@ export function mapRowToActivity(row: Record<string, unknown>): Activity {
     created_via: typeof row.created_via === 'string' ? row.created_via : 'chat',
     raw_message: row.raw_message ?? null,
     is_favorite: isFavoriteVal,
+    quantity: (() => {
+      const q = row.quantity;
+      if (q == null || q === '') return null;
+      if (typeof q === 'number') return Number.isFinite(q) ? q : null;
+      const n = Number(q);
+      return Number.isFinite(n) ? n : null;
+    })(),
+    quantity_unit: typeof row.quantity_unit === 'string' ? row.quantity_unit : null,
   };
 }
 

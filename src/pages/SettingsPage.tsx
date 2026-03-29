@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sun, Moon, Globe, Info, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Info, Loader2 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { CURRENCIES, getCurrencySymbol } from '@/lib/currency';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useLanguageStore } from '@/store/useLanguageStore';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 const DEFAULT_NOTIFICATION_SETTINGS = {
@@ -78,11 +80,12 @@ export default function SettingsPage() {
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
   const { theme, toggle } = useTheme();
+  const { t } = useTranslation();
+  const { language, setLanguage } = useLanguageStore();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => ({
     ...DEFAULT_NOTIFICATION_SETTINGS,
   }));
-  const [lang, setLang] = useState<'tr' | 'en'>('tr');
 
   const setGlobalCurrency = useCurrencyStore(s => s.setCurrency);
   const [prefsLoading, setPrefsLoading] = useState(true);
@@ -130,6 +133,27 @@ export default function SettingsPage() {
   }, [setGlobalCurrency, userId]);
 
   const currencyCode = useCurrencyStore(s => s.code);
+
+  const personalityOptions = useMemo(() => [
+    {
+      value: 'balanced' as const,
+      emoji: '😊',
+      label: t('settings.personality_balanced'),
+      desc: t('settings.personality_balanced_desc'),
+    },
+    {
+      value: 'strict' as const,
+      emoji: '💪',
+      label: t('settings.personality_strict'),
+      desc: t('settings.personality_strict_desc'),
+    },
+    {
+      value: 'gentle' as const,
+      emoji: '🤗',
+      label: t('settings.personality_gentle'),
+      desc: t('settings.personality_gentle_desc'),
+    },
+  ], [t]);
 
   const handleCurrencyChange = async (code: string) => {
     if (!userId) return;
@@ -197,11 +221,11 @@ export default function SettingsPage() {
       return;
     }
     if (newPassword !== newPasswordConfirm) {
-      setPasswordError('Yeni şifreler eşleşmiyor');
+      setPasswordError(t('settings.password_mismatch'));
       return;
     }
     if (newPassword.length < 6) {
-      setPasswordError('Yeni şifre en az 6 karakter olmalı');
+      setPasswordError(t('settings.password_min_length'));
       return;
     }
     setIsChangingPassword(true);
@@ -211,7 +235,7 @@ export default function SettingsPage() {
         password: currentPassword,
       });
       if (signInError) {
-        setPasswordError('Mevcut şifre yanlış');
+        setPasswordError(t('settings.wrong_password'));
         return;
       }
       const { error } = await supabase.auth.updateUser({
@@ -221,7 +245,7 @@ export default function SettingsPage() {
         setPasswordError(error.message);
         return;
       }
-      toast.success('Şifre güncellendi');
+      toast.success(t('settings.password_updated'));
       setCurrentPassword('');
       setNewPassword('');
       setNewPasswordConfirm('');
@@ -236,13 +260,47 @@ export default function SettingsPage() {
         <button onClick={() => navigate(-1)} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-muted">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-lg font-semibold">Ayarlar</h1>
+        <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
       </div>
 
       <div className="p-4 space-y-3">
+        {/* Dil */}
+        <div
+          className="flex items-center justify-between px-4 py-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0">
+              🌍
+            </div>
+            <p className="font-medium text-sm text-gray-800 dark:text-gray-100">
+              {t('settings.language')}
+            </p>
+          </div>
+          <div className="flex gap-1 shrink-0">
+            {[
+              { code: 'tr', label: 'TR' },
+              { code: 'en', label: 'EN' },
+              { code: 'fr', label: 'FR' },
+            ].map(lang => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => void setLanguage(lang.code, user?.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                  language === lang.code
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600'
+                }`}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Para Birimi */}
         <div className="bg-card border border-border rounded-2xl p-4">
-          <h2 className="text-sm font-semibold mb-2">Para Birimi</h2>
+          <h2 className="text-sm font-semibold mb-2">{t('settings.currency')}</h2>
           {prefsLoading ? (
             <div className="flex justify-center py-6">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -273,7 +331,7 @@ export default function SettingsPage() {
               <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-950/50 flex items-center justify-center">
                 🔒
               </div>
-              <span className="font-medium text-gray-800 dark:text-foreground">Şifre Değiştir</span>
+              <span className="font-medium text-gray-800 dark:text-foreground">{t('settings.change_password')}</span>
             </div>
             <svg
               className={cn(
@@ -293,7 +351,7 @@ export default function SettingsPage() {
             <div className="px-4 pb-4 border-t border-gray-100 dark:border-border">
               <div className="space-y-3 mt-4">
                 <div>
-                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">Mevcut Şifre</label>
+                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">{t('settings.current_password')}</label>
                   <input
                     type="password"
                     value={currentPassword}
@@ -304,7 +362,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">Yeni Şifre</label>
+                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">{t('settings.new_password')}</label>
                   <input
                     type="password"
                     value={newPassword}
@@ -315,7 +373,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">Yeni Şifre Tekrar</label>
+                  <label className="text-sm text-gray-600 dark:text-muted-foreground mb-1 block">{t('settings.new_password_confirm')}</label>
                   <input
                     type="password"
                     value={newPasswordConfirm}
@@ -334,7 +392,7 @@ export default function SettingsPage() {
                   disabled={isChangingPassword}
                   className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium text-sm disabled:opacity-50 dark:bg-primary dark:text-primary-foreground"
                 >
-                  {isChangingPassword ? 'Güncelleniyor...' : 'Şifreyi Güncelle'}
+                  {isChangingPassword ? t('settings.updating') : t('settings.update_password')}
                 </button>
               </div>
             </div>
@@ -343,21 +401,15 @@ export default function SettingsPage() {
 
         {/* Zeeky kişiliği */}
         <div className="bg-card border border-border rounded-2xl p-4">
-          <h2 className="text-sm font-semibold mb-1">Zeeky&apos;nin Kişiliği</h2>
-          <p className="text-[11px] text-muted-foreground mb-3">Zeeky sana nasıl davransın?</p>
+          <h2 className="text-sm font-semibold mb-1">{t('settings.personality')}</h2>
+          <p className="text-[11px] text-muted-foreground mb-3">{t('settings.personality_desc')}</p>
           {prefsLoading ? (
             <div className="flex justify-center py-6">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  { value: 'balanced' as const, emoji: '😊', label: 'Dengeli', desc: 'Motive edici ve dengeli' },
-                  { value: 'strict' as const, emoji: '💪', label: 'Sert', desc: 'Direkt ve sonuç odaklı' },
-                  { value: 'gentle' as const, emoji: '🤗', label: 'Nazik', desc: 'Anlayışlı ve destekleyici' },
-                ]
-              ).map(opt => (
+              {personalityOptions.map(opt => (
                 <button
                   key={opt.value}
                   type="button"
@@ -382,7 +434,7 @@ export default function SettingsPage() {
         <div className="bg-card border border-border rounded-2xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {theme === 'dark' ? <Moon className="w-5 h-5 text-primary" /> : <Sun className="w-5 h-5 text-primary" />}
-            <span className="text-sm font-medium">Karanlık Mod</span>
+            <span className="text-sm font-medium">{t('settings.dark_mode')}</span>
           </div>
           <Toggle on={theme === 'dark'} onToggle={toggle} />
         </div>
@@ -393,8 +445,8 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <span>🔔</span>
               <div>
-                <p className="font-medium text-sm text-gray-900 dark:text-foreground">Bildirimler</p>
-                <p className="text-xs text-gray-400 dark:text-muted-foreground">Tüm bildirimleri aç/kapat</p>
+                <p className="font-medium text-sm text-gray-900 dark:text-foreground">{t('settings.notifications')}</p>
+                <p className="text-xs text-gray-400 dark:text-muted-foreground">{t('settings.notifications_desc')}</p>
               </div>
             </div>
             <Toggle
@@ -404,11 +456,11 @@ export default function SettingsPage() {
             />
           </div>
           {([
-            { key: 'weekly_summary' as const, label: 'Haftalık özet', icon: '📊' },
-            { key: 'budget_alerts' as const, label: 'Bütçe uyarıları', icon: '💰' },
-            { key: 'sport_reminders' as const, label: 'Spor hatırlatmaları', icon: '🏃' },
-            { key: 'social_reminders' as const, label: 'Sosyal hatırlatmalar', icon: '👥' },
-            { key: 'payment_reminders' as const, label: 'Ödeme hatırlatmaları', icon: '📅' },
+            { key: 'weekly_summary' as const, labelKey: 'settings.weekly_summary', icon: '📊' },
+            { key: 'budget_alerts' as const, labelKey: 'settings.budget_alerts', icon: '💰' },
+            { key: 'sport_reminders' as const, labelKey: 'settings.sport_reminders', icon: '🏃' },
+            { key: 'social_reminders' as const, labelKey: 'settings.social_reminders', icon: '👥' },
+            { key: 'payment_reminders' as const, labelKey: 'settings.payment_reminders', icon: '📅' },
           ]).map(item => (
             <div
               key={item.key}
@@ -419,7 +471,7 @@ export default function SettingsPage() {
             >
               <div className="flex items-center gap-3">
                 <span>{item.icon}</span>
-                <p className="text-sm text-gray-700 dark:text-foreground/90">{item.label}</p>
+                <p className="text-sm text-gray-700 dark:text-foreground/90">{t(item.labelKey)}</p>
               </div>
               <Toggle
                 value={notificationSettings[item.key] ?? true}
@@ -430,23 +482,11 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        {/* Language */}
-        <div className="bg-card border border-border rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Globe className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium">Dil</span>
-          </div>
-          <div className="flex gap-1 bg-muted rounded-lg p-0.5">
-            <button onClick={() => setLang('tr')} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-colors', lang === 'tr' ? 'bg-primary text-primary-foreground' : 'text-foreground')}>TR</button>
-            <button onClick={() => setLang('en')} className={cn('px-3 py-1.5 rounded-md text-xs font-medium transition-colors', lang === 'en' ? 'bg-primary text-primary-foreground' : 'text-foreground')}>EN</button>
-          </div>
-        </div>
-
         {/* About */}
         <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">
           <Info className="w-5 h-5 text-primary" />
           <div>
-            <span className="text-sm font-medium block">Hakkında</span>
+            <span className="text-sm font-medium block">{t('settings.about')}</span>
             <span className="text-xs text-muted-foreground">Zeeky v1.0.0</span>
           </div>
         </div>

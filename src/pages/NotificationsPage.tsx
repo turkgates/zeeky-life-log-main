@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useLanguageStore } from '@/store/useLanguageStore';
+import { useTranslation } from 'react-i18next';
 
 interface Notification {
   id: string;
@@ -17,7 +19,7 @@ interface Notification {
   navigate_to?: string;
 }
 
-function formatTime(dateStr: string) {
+function formatTime(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string, locale: string) {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -25,11 +27,11 @@ function formatTime(dateStr: string) {
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
-  if (mins < 1) return 'Az önce';
-  if (mins < 60) return `${mins} dk önce`;
-  if (hours < 24) return `${hours} saat önce`;
-  if (days === 1) return 'Dün';
-  return date.toLocaleDateString('tr-TR', {
+  if (mins < 1) return t('notifications.just_now');
+  if (mins < 60) return t('notifications.minutes_ago', { count: mins });
+  if (hours < 24) return t('notifications.hours_ago', { count: hours });
+  if (days === 1) return t('notifications.yesterday');
+  return date.toLocaleDateString(locale, {
     day: 'numeric',
     month: 'long',
   });
@@ -44,28 +46,30 @@ function startOfWeekMonday(d: Date): Date {
   return copy;
 }
 
-function getGroupLabel(iso: string): string {
+function getGroupLabel(iso: string, t: (key: string) => string, locale: string): string {
   const d = new Date(iso);
   const dOnly = new Date(d);
   dOnly.setHours(0, 0, 0, 0);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diffDays = Math.round((today.getTime() - dOnly.getTime()) / 86400000);
-  if (diffDays === 0) return 'Bugün';
-  if (diffDays === 1) return 'Dün';
+  if (diffDays === 0) return t('notifications.today');
+  if (diffDays === 1) return t('notifications.yesterday');
   const weekStart = startOfWeekMonday(today);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 7);
-  if (dOnly >= weekStart && dOnly < weekEnd) return 'Bu Hafta';
-  return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+  if (dOnly >= weekStart && dOnly < weekEnd) return t('notifications.this_week');
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-const GROUP_ORDER = ['Bugün', 'Dün', 'Bu Hafta'];
-
-function groupNotifications(items: Notification[]): { label: string; items: Notification[] }[] {
+function groupNotifications(items: Notification[], t: (key: string) => string, locale: string): { label: string; items: Notification[] }[] {
+  const todayLabel = t('notifications.today');
+  const yesterdayLabel = t('notifications.yesterday');
+  const thisWeekLabel = t('notifications.this_week');
+  const GROUP_ORDER = [todayLabel, yesterdayLabel, thisWeekLabel];
   const map = new Map<string, Notification[]>();
   for (const n of items) {
-    const label = getGroupLabel(n.created_at);
+    const label = getGroupLabel(n.created_at, t, locale);
     if (!map.has(label)) map.set(label, []);
     map.get(label)!.push(n);
   }
@@ -83,8 +87,11 @@ function groupNotifications(items: Notification[]): { label: string; items: Noti
 }
 
 export default function NotificationsPage() {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === 'fr' ? 'fr-FR' : i18n.language === 'en' ? 'en-GB' : 'tr-TR';
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { language } = useLanguageStore();
   const userId = user?.id || '';
   const { setUnreadCount } = useNotificationStore();
 
@@ -123,6 +130,7 @@ export default function NotificationsPage() {
 
   const generateNotifications = useCallback(async () => {
     if (!userId) return;
+    const lang = useLanguageStore.getState().language;
     try {
       await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-notifications`,
@@ -133,7 +141,10 @@ export default function NotificationsPage() {
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY as string,
           },
-          body: JSON.stringify({ user_id: userId }),
+          body: JSON.stringify({
+            user_id: userId,
+            language: lang,
+          }),
         }
       );
     } catch (e) {
@@ -141,23 +152,72 @@ export default function NotificationsPage() {
     }
   }, [userId]);
 
+  const regenerateNotifications = useCallback(async () => {
+    if (!userId) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', userId)
+      .eq('is_read', false)
+      .gte('created_at', `${todayStr}T00:00:00.000Z`)
+      .lte('created_at', `${todayStr}T23:59:59.999Z`);
+    await generateNotifications();
+    await loadNotifications();
+  }, [userId, generateNotifications, loadNotifications]);
+
   const checkAndGenerate = useCallback(async () => {
     if (!userId) return;
+    const lang = useLanguageStore.getState().language;
     const today = new Date().toISOString().split('T')[0];
 
     const { data: todayNotifs } = await supabase
       .from('notifications')
-      .select('id')
+      .select('id, title')
       .eq('user_id', userId)
       .gte('created_at', `${today}T00:00:00.000Z`)
+      .lte('created_at', `${today}T23:59:59.999Z`)
       .limit(1);
 
     if (!todayNotifs || todayNotifs.length === 0) {
       await generateNotifications();
+    } else {
+      const firstTitle = todayNotifs[0].title;
+      const isTurkish = /[çğışöüÇĞİŞÖÜ]/.test(firstTitle);
+      const isFrench = /[àâçéèêëîïôùûüÀÂÇÉÈÊËÎÏÔÙÛÜ]/.test(firstTitle);
+
+      const needsRegenerate =
+        (lang === 'tr' && !isTurkish && isFrench) ||
+        (lang === 'en' && (isTurkish || isFrench)) ||
+        (lang === 'fr' && !isFrench && isTurkish);
+
+      if (needsRegenerate) {
+        await regenerateNotifications();
+        return;
+      }
     }
 
     await loadNotifications();
-  }, [generateNotifications, loadNotifications, userId]);
+  }, [userId, generateNotifications, loadNotifications, regenerateNotifications]);
+
+  const languageEffectReady = useRef(false);
+  const prevUserIdForLangEffect = useRef(userId);
+
+  useEffect(() => {
+    if (prevUserIdForLangEffect.current !== userId) {
+      prevUserIdForLangEffect.current = userId;
+      languageEffectReady.current = false;
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (!languageEffectReady.current) {
+      languageEffectReady.current = true;
+      return;
+    }
+    void regenerateNotifications();
+  }, [language, userId, regenerateNotifications]);
 
   useEffect(() => {
     if (!userId) {
@@ -211,7 +271,7 @@ export default function NotificationsPage() {
     clearTimeout(longPressTimer.current);
   };
 
-  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
+  const groups = useMemo(() => groupNotifications(notifications, t, locale), [notifications, t, locale]);
 
   if (!userId) {
     return (
@@ -224,10 +284,10 @@ export default function NotificationsPage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="flex-1 text-base font-semibold">Bildirimler</h1>
+          <h1 className="flex-1 text-base font-semibold">{t('notifications.title')}</h1>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center text-gray-500 text-sm">
-          <p>Bildirimleri görmek için giriş yapmalısın.</p>
+          <p>{t('notifications.login_required')}</p>
         </div>
       </div>
     );
@@ -245,14 +305,14 @@ export default function NotificationsPage() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="flex-1 text-base font-semibold">Bildirimler</h1>
+        <h1 className="flex-1 text-base font-semibold">{t('notifications.title')}</h1>
         {notifications.some(n => !n.is_read) && (
           <button
             type="button"
             onClick={() => void markAllRead()}
             className="text-xs font-medium text-white/90 active:opacity-80"
           >
-            Tümünü Okundu İşaretle
+            {t('notifications.mark_all_read')}
           </button>
         )}
       </div>
@@ -260,13 +320,13 @@ export default function NotificationsPage() {
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
           <Loader2 className="w-8 h-8 animate-spin" />
-          <p className="text-sm">Yükleniyor...</p>
+          <p className="text-sm">{t('notifications.loading')}</p>
         </div>
       ) : notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-gray-400 px-6">
           <span className="text-5xl mb-4">🔔</span>
-          <p className="font-medium">Henüz bildirim yok</p>
-          <p className="text-sm mt-1 text-center">Yeni bildirimler burada görünecek</p>
+          <p className="font-medium">{t('notifications.no_notifications')}</p>
+          <p className="text-sm mt-1 text-center">{t('notifications.no_notifications_sub')}</p>
         </div>
       ) : (
         <div className="flex-1 px-4 py-3 pb-8">
@@ -307,7 +367,7 @@ export default function NotificationsPage() {
                           )}
                         </div>
                         <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{n.content}</p>
-                        <p className="text-xs text-gray-400 mt-1">{formatTime(n.created_at)}</p>
+                        <p className="text-xs text-gray-400 mt-1">{formatTime(n.created_at, t, locale)}</p>
                       </div>
                     </div>
 
@@ -321,14 +381,14 @@ export default function NotificationsPage() {
                           onClick={e => { e.stopPropagation(); void deleteNotification(n.id); }}
                           className="flex items-center gap-1.5 px-4 py-2 bg-destructive text-white rounded-xl text-sm font-semibold"
                         >
-                          <Trash2 className="w-4 h-4" /> Sil
+                          <Trash2 className="w-4 h-4" /> {t('notifications.delete')}
                         </button>
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); setLongPressId(null); }}
                           className="px-4 py-2 bg-white text-gray-800 rounded-xl text-sm font-semibold"
                         >
-                          İptal
+                          {t('notifications.cancel')}
                         </button>
                       </div>
                     )}

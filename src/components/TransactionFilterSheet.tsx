@@ -5,6 +5,8 @@ import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
+import { useTranslation } from 'react-i18next';
+import { translateFinanceCategory } from '@/lib/categoryTranslations';
 
 export interface TransactionFilters {
   type: 'all' | 'income' | 'expense';
@@ -27,7 +29,7 @@ const EXPENSE_CATEGORIES = [
   'Yiyecek & İçecek', 'Ulaşım', 'Eğlence', 'Faturalar',
   'Sağlık', 'Giyim', 'Teknoloji', 'Kira & Ev',
   'Eğitim', 'Spor', 'Güzellik & Bakım', 'Seyahat',
-  'Hediye', 'Sigorta', 'Diğer Gider',
+  'Hediye', 'Sigorta', 'Alışveriş', 'Diğer Gider',
 ];
 
 function getCategoriesForType(type: 'all' | 'income' | 'expense'): string[] {
@@ -64,6 +66,7 @@ export function getActiveFilterCount(f: TransactionFilters): number {
 }
 
 export default function TransactionFilterSheet({ filters, onApply, onClose }: Props) {
+  const { t } = useTranslation();
   const [local, setLocal] = useState<TransactionFilters>({ ...filters });
   const currencySymbol = useCurrencyStore(s => s.symbol);
 
@@ -76,11 +79,20 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
     }));
   };
 
-  const handleTypeChange = (t: 'all' | 'income' | 'expense') => {
-    setLocal(prev => ({ ...prev, type: t, categories: [] }));
+  const handleTypeChange = (next: 'all' | 'income' | 'expense') => {
+    setLocal(prev => ({ ...prev, type: next, categories: [] }));
   };
 
   const visibleCategories = getCategoriesForType(local.type);
+
+  const dateRangeOptions = [
+    { k: 'all', labelKey: 'finance.filter.all_time' },
+    { k: 'thisMonth', labelKey: 'finance.filter.this_month' },
+    { k: 'lastMonth', labelKey: 'finance.filter.last_month' },
+    { k: 'last3Months', labelKey: 'finance.filter.last_3_months' },
+    { k: 'thisYear', labelKey: 'finance.filter.this_year' },
+    { k: 'custom', labelKey: 'finance.filter.custom_range' },
+  ] as const;
 
   return (
     <>
@@ -91,19 +103,23 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
         </div>
 
         <div className="flex items-center justify-between px-5 mb-4">
-          <h3 className="font-semibold text-base">Filtrele</h3>
-          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+          <h3 className="font-semibold text-base">{t('finance.filter.title')}</h3>
+          <button type="button" onClick={onClose} aria-label={t('common.close')}><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-5">
           {/* Type */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Tür</label>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">{t('finance.filter.type')}</label>
             <div className="flex gap-2">
-              {([{ k: 'all', l: 'Tümü' }, { k: 'income', l: 'Gelir' }, { k: 'expense', l: 'Gider' }] as const).map(t => (
-                <button key={t.k} onClick={() => handleTypeChange(t.k)}
-                  className={cn("flex-1 py-2 rounded-xl text-xs font-semibold transition-colors", local.type === t.k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
-                >{t.l}</button>
+              {([
+                { k: 'all' as const, labelKey: 'finance.filter.all' },
+                { k: 'income' as const, labelKey: 'finance.filter.income' },
+                { k: 'expense' as const, labelKey: 'finance.filter.expense' },
+              ]).map(opt => (
+                <button key={opt.k} type="button" onClick={() => handleTypeChange(opt.k)}
+                  className={cn("flex-1 py-2 rounded-xl text-xs font-semibold transition-colors", local.type === opt.k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
+                >{t(opt.labelKey)}</button>
               ))}
             </div>
           </div>
@@ -111,43 +127,40 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
           {/* Categories */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-2 block">
-              Kategori
+              {t('finance.filter.category')}
               {local.type !== 'all' && (
                 <span className="ml-1 text-[10px] text-muted-foreground/60">
-                  ({local.type === 'income' ? 'Gelir' : 'Gider'})
+                  ({local.type === 'income' ? t('finance.filter.income') : t('finance.filter.expense')})
                 </span>
               )}
             </label>
             <div className="flex flex-wrap gap-2">
               {visibleCategories.map(name => (
-                <button key={name} onClick={() => toggleCategory(name)}
+                <button key={name} type="button" onClick={() => toggleCategory(name)}
                   className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-colors", local.categories.includes(name) ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground")}
-                >{name}</button>
+                >{translateFinanceCategory(t, name)}</button>
               ))}
             </div>
           </div>
 
           {/* Date Range */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Tarih Aralığı</label>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">{t('finance.filter.date_range')}</label>
             <div className="flex flex-wrap gap-2">
-              {[
-                { k: 'all', l: 'Tümü' }, { k: 'thisWeek', l: 'Bu Hafta' }, { k: 'thisMonth', l: 'Bu Ay' },
-                { k: 'last3Months', l: 'Son 3 Ay' }, { k: 'thisYear', l: 'Bu Yıl' }, { k: 'custom', l: 'Özel Aralık' },
-              ].map(d => (
-                <button key={d.k} onClick={() => setLocal(p => ({ ...p, dateRange: d.k }))}
+              {dateRangeOptions.map(d => (
+                <button key={d.k} type="button" onClick={() => setLocal(p => ({ ...p, dateRange: d.k }))}
                   className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-colors", local.dateRange === d.k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
-                >{d.l}</button>
+                >{t(d.labelKey)}</button>
               ))}
             </div>
             {local.dateRange === 'custom' && (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
-                  <label className="text-[10px] text-muted-foreground mb-1 block">Başlangıç</label>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">{t('finance.filter.start_date')}</label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm text-left border border-border">
-                        {local.customStart ? format(local.customStart, 'dd/MM/yyyy') : 'Seç'}
+                      <button type="button" className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm text-left border border-border">
+                        {local.customStart ? format(local.customStart, 'dd/MM/yyyy') : t('finance.filter.select_date')}
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -156,11 +169,11 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
                   </Popover>
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground mb-1 block">Bitiş</label>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">{t('finance.filter.end_date')}</label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm text-left border border-border">
-                        {local.customEnd ? format(local.customEnd, 'dd/MM/yyyy') : 'Seç'}
+                      <button type="button" className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm text-left border border-border">
+                        {local.customEnd ? format(local.customEnd, 'dd/MM/yyyy') : t('finance.filter.select_date')}
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -174,38 +187,44 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
 
           {/* Amount Range */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Tutar Aralığı</label>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">{t('finance.filter.amount_range')}</label>
             <div className="grid grid-cols-2 gap-3">
-              <input type="number" placeholder={`Min ${currencySymbol}`} value={local.minAmount} onChange={e => setLocal(p => ({ ...p, minAmount: e.target.value }))}
+              <input type="number" placeholder={t('finance.filter.min_placeholder', { symbol: currencySymbol })} value={local.minAmount} onChange={e => setLocal(p => ({ ...p, minAmount: e.target.value }))}
                 className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors" />
-              <input type="number" placeholder={`Max ${currencySymbol}`} value={local.maxAmount} onChange={e => setLocal(p => ({ ...p, maxAmount: e.target.value }))}
+              <input type="number" placeholder={t('finance.filter.max_placeholder', { symbol: currencySymbol })} value={local.maxAmount} onChange={e => setLocal(p => ({ ...p, maxAmount: e.target.value }))}
                 className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border focus:border-accent transition-colors" />
             </div>
           </div>
 
           {/* Recurring */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Tekrarlayan</label>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">{t('finance.filter.recurring_section')}</label>
             <div className="flex gap-2">
-              {[{ k: 'all', l: 'Tümü' }, { k: 'recurring', l: 'Tekrarlayan' }, { k: 'oneTime', l: 'Tek seferlik' }].map(r => (
-                <button key={r.k} onClick={() => setLocal(p => ({ ...p, recurring: r.k as any }))}
+              {[
+                { k: 'all' as const, labelKey: 'finance.filter.all' },
+                { k: 'recurring' as const, labelKey: 'finance.filter.recurring_only' },
+                { k: 'oneTime' as const, labelKey: 'finance.filter.one_time' },
+              ].map(r => (
+                <button key={r.k} type="button" onClick={() => setLocal(p => ({ ...p, recurring: r.k }))}
                   className={cn("flex-1 py-2 rounded-xl text-xs font-semibold transition-colors", local.recurring === r.k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
-                >{r.l}</button>
+                >{t(r.labelKey)}</button>
               ))}
             </div>
           </div>
 
           {/* Sort */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Sıralama</label>
+            <label className="text-xs font-medium text-muted-foreground mb-2 block">{t('finance.filter.sort_section')}</label>
             <div className="flex flex-wrap gap-2">
               {[
-                { k: 'newest', l: 'En yeni' }, { k: 'oldest', l: 'En eski' },
-                { k: 'highest', l: 'En yüksek tutar' }, { k: 'lowest', l: 'En düşük tutar' },
+                { k: 'newest' as const, labelKey: 'finance.filter.sort_newest' },
+                { k: 'oldest' as const, labelKey: 'finance.filter.sort_oldest' },
+                { k: 'highest' as const, labelKey: 'finance.filter.sort_highest' },
+                { k: 'lowest' as const, labelKey: 'finance.filter.sort_lowest' },
               ].map(s => (
-                <button key={s.k} onClick={() => setLocal(p => ({ ...p, sort: s.k as any }))}
+                <button key={s.k} type="button" onClick={() => setLocal(p => ({ ...p, sort: s.k }))}
                   className={cn("px-3 py-1.5 rounded-full text-xs font-medium transition-colors", local.sort === s.k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
-                >{s.l}</button>
+                >{t(s.labelKey)}</button>
               ))}
             </div>
           </div>
@@ -213,13 +232,13 @@ export default function TransactionFilterSheet({ filters, onApply, onClose }: Pr
 
         {/* Actions */}
         <div className="px-5 pt-3 pb-2 border-t border-border flex gap-3">
-          <button onClick={() => { onApply(DEFAULT_FILTERS); onClose(); }}
+          <button type="button" onClick={() => { onApply(DEFAULT_FILTERS); onClose(); }}
             className="flex-1 py-3 rounded-xl border border-border text-muted-foreground font-semibold text-sm active:scale-[0.97] transition-transform">
-            Filtreleri Temizle
+            {t('finance.filter.clear')}
           </button>
-          <button onClick={() => { onApply(local); onClose(); }}
+          <button type="button" onClick={() => { onApply(local); onClose(); }}
             className="flex-1 py-3 rounded-xl bg-accent text-accent-foreground font-semibold text-sm active:scale-[0.97] transition-transform">
-            Uygula
+            {t('finance.filter.apply')}
           </button>
         </div>
       </div>

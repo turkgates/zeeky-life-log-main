@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { getRelationship } from '@/lib/categoryTranslations';
 import {
   fetchFriends,
   addFriend,
@@ -17,17 +18,18 @@ import {
   type Friend,
 } from '@/lib/friendsSupabase';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useTranslation } from 'react-i18next';
 
 const FRIEND_RELATIONSHIPS = ['arkadaş', 'aile', 'akraba', 'iş arkadaşı', 'partner', 'diğer'] as const;
 
-const FILTER_CHIPS: { key: 'all' | typeof FRIEND_RELATIONSHIPS[number]; label: string }[] = [
-  { key: 'all', label: 'Tümü' },
-  { key: 'arkadaş', label: 'Arkadaş' },
-  { key: 'aile', label: 'Aile' },
-  { key: 'akraba', label: 'Akraba' },
-  { key: 'iş arkadaşı', label: 'İş Arkadaşı' },
-  { key: 'partner', label: 'Partner' },
-  { key: 'diğer', label: 'Diğer' },
+const FILTER_CHIPS: { key: 'all' | typeof FRIEND_RELATIONSHIPS[number]; tKey: string }[] = [
+  { key: 'all', tKey: 'friends.all' },
+  { key: 'arkadaş', tKey: 'friends.arkadas' },
+  { key: 'aile', tKey: 'friends.aile' },
+  { key: 'akraba', tKey: 'friends.akraba' },
+  { key: 'iş arkadaşı', tKey: 'friends.is_arkadasi' },
+  { key: 'partner', tKey: 'friends.partner' },
+  { key: 'diğer', tKey: 'friends.diger' },
 ];
 
 const AVATAR_COLORS = [
@@ -41,17 +43,6 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(sum) % AVATAR_COLORS.length];
 }
 
-function formatRelationship(r: string): string {
-  const map: Record<string, string> = {
-    arkadaş: 'Arkadaş',
-    aile: 'Aile',
-    akraba: 'Akraba',
-    'iş arkadaşı': 'İş Arkadaşı',
-    partner: 'Partner',
-    diğer: 'Diğer',
-  };
-  return map[r] ?? r;
-}
 
 function formatLastInteraction(iso?: string | null): string {
   if (!iso) return '—';
@@ -68,6 +59,7 @@ function formatLastInteraction(iso?: string | null): string {
 }
 
 export default function FriendsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
@@ -160,13 +152,12 @@ export default function FriendsPage() {
 
   const save = async () => {
     if (!form.name.trim()) {
-      toast.error('İsim zorunludur');
+      toast.error(t('friends.name_required'));
       return;
     }
     setSaving(true);
     try {
       if (!userId) {
-        toast.error('Oturum yok');
         return;
       }
       if (form.id) {
@@ -178,10 +169,10 @@ export default function FriendsPage() {
           notes: form.notes.trim() || undefined,
         });
         if (error) {
-          toast.error('Güncellenemedi');
+          toast.error(t('friends.update_error'));
           return;
         }
-        toast.success('Güncellendi');
+        toast.success(t('friends.update_success'));
       } else {
         const { error } = await addFriend(userId, {
           name: form.name.trim(),
@@ -192,10 +183,10 @@ export default function FriendsPage() {
           source: 'manual',
         });
         if (error) {
-          toast.error('Eklenemedi');
+          toast.error(t('friends.add_error'));
           return;
         }
-        toast.success('Arkadaş eklendi');
+        toast.success(t('friends.add_success'));
       }
       setSheetOpen(false);
       void load();
@@ -206,13 +197,13 @@ export default function FriendsPage() {
 
   const remove = async (id: string) => {
     if (!userId) return;
-    if (!window.confirm('Bu kişiyi silmek istediğine emin misin?')) return;
+    if (!window.confirm(t('friends.delete_confirm'))) return;
     const { error } = await deleteFriend(userId, id);
     if (error) {
-      toast.error('Silinemedi');
+      toast.error(t('friends.delete_error'));
       return;
     }
-    toast.success('Silindi');
+    toast.success(t('friends.delete_success'));
     setMenuOpenId(null);
     void load();
   };
@@ -230,7 +221,7 @@ export default function FriendsPage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold">Arkadaşlarım</h1>
+          <h1 className="text-lg font-bold">{t('friends.title')}</h1>
           <button
             type="button"
             onClick={openAdd}
@@ -249,7 +240,7 @@ export default function FriendsPage() {
             type="search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="İsme göre ara..."
+            placeholder={t('friends.search')}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-sm outline-none focus:border-blue-400"
           />
         </div>
@@ -267,7 +258,7 @@ export default function FriendsPage() {
                   : 'bg-muted/80 text-muted-foreground border-border',
               )}
             >
-              {c.label}
+              {t(c.tKey)}
             </button>
           ))}
         </div>
@@ -280,7 +271,7 @@ export default function FriendsPage() {
           </div>
         ) : filtered.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-12">
-            {friends.length === 0 ? 'Henüz arkadaş eklenmedi.' : 'Sonuç bulunamadı.'}
+            {friends.length === 0 ? t('friends.no_friends') : t('friends.no_results')}
           </p>
         ) : (
           filtered.map(f => {
@@ -298,9 +289,9 @@ export default function FriendsPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm text-foreground truncate">{f.name}</p>
-                  <p className="text-xs text-muted-foreground">{formatRelationship(f.relationship)}</p>
+                  <p className="text-xs text-muted-foreground">{getRelationship(f.relationship)}</p>
                   <p className="text-[11px] text-muted-foreground/80 mt-0.5">
-                    Son etkileşim: {formatLastInteraction(f.last_interaction)}
+                    {t('friends.last_interaction')} {formatLastInteraction(f.last_interaction)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -329,14 +320,14 @@ export default function FriendsPage() {
                           className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted"
                           onClick={() => openEdit(f)}
                         >
-                          Düzenle
+                          {t('friends.edit_action')}
                         </button>
                         <button
                           type="button"
                           className="w-full px-4 py-2.5 text-left text-sm text-destructive hover:bg-destructive/10"
                           onClick={() => void remove(f.id)}
                         >
-                          Sil
+                          {t('friends.delete_action')}
                         </button>
                       </div>
                     )}
@@ -375,29 +366,29 @@ export default function FriendsPage() {
             </div>
             <div className="px-5 pb-6">
               <h2 className="text-base font-semibold mb-4">
-                {form.id ? 'Arkadaşı düzenle' : 'Yeni arkadaş'}
+                {form.id ? t('friends.edit') : t('friends.add_new')}
               </h2>
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">İsim *</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('friends.name_label')}</label>
                   <input
                     value={form.name}
                     onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                     className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border"
-                    placeholder="Ad Soyad"
+                    placeholder={t('friends.name_placeholder')}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Takma ad</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('friends.nickname_label')}</label>
                   <input
                     value={form.nickname}
                     onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))}
                     className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border"
-                    placeholder="Opsiyonel"
+                    placeholder={t('friends.optional')}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">İlişki tipi</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('friends.relationship_label')}</label>
                   <select
                     value={form.relationship}
                     onChange={e => setForm(p => ({ ...p, relationship: e.target.value }))}
@@ -405,29 +396,29 @@ export default function FriendsPage() {
                   >
                     {FRIEND_RELATIONSHIPS.map(r => (
                       <option key={r} value={r}>
-                        {formatRelationship(r)}
+                        {getRelationship(r)}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Telefon</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('friends.phone_label')}</label>
                   <input
                     value={form.phone}
                     onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
                     className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border"
-                    placeholder="Opsiyonel"
+                    placeholder={t('friends.optional')}
                     inputMode="tel"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Notlar</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('friends.notes_label')}</label>
                   <textarea
                     value={form.notes}
                     onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                     rows={3}
                     className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none border border-border resize-none"
-                    placeholder="Opsiyonel"
+                    placeholder={t('friends.optional')}
                   />
                 </div>
               </div>
@@ -438,7 +429,7 @@ export default function FriendsPage() {
                 className="w-full mt-6 py-3.5 rounded-xl bg-blue-600 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Kaydet
+                {t('friends.save')}
               </button>
             </div>
           </div>

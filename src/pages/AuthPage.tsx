@@ -4,10 +4,37 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { signIn, signUp, resetPassword } from '@/lib/auth';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { useLanguageStore } from '@/store/useLanguageStore';
 
 type Tab = 'login' | 'register';
 
+function mapAuthError(message: string | undefined, translate: TFunction): string {
+  if (!message) return translate('auth.error_generic');
+  const m = message.toLowerCase();
+  if (
+    m.includes('invalid login') ||
+    m.includes('invalid email or password') ||
+    m.includes('invalid credentials')
+  ) {
+    return translate('auth.error_invalid');
+  }
+  if (m.includes('already registered') || m.includes('user already') || m.includes('email address is already')) {
+    return translate('auth.error_email_taken');
+  }
+  if (
+    (m.includes('password') && (m.includes('6') || m.includes('least') || m.includes('short'))) ||
+    m.includes('weak password')
+  ) {
+    return translate('auth.error_weak_password');
+  }
+  return translate('auth.error_generic');
+}
+
 export default function AuthPage() {
+  const { t } = useTranslation();
+  const { language, setLanguage } = useLanguageStore();
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
 
@@ -32,20 +59,20 @@ export default function AuthPage() {
   }, [authLoading, isAuthenticated, navigate]);
 
   const inputCls =
-    'w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors';
+    'w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 transition-colors';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!email.trim() || !password) {
-      setError('E-posta ve şifre gerekli');
+      setError(t('auth.error_required_login'));
       return;
     }
     setLoading(true);
     const { error: err } = await signIn(email.trim(), password);
     setLoading(false);
     if (err) {
-      setError(err.message);
+      setError(mapAuthError(err.message, t));
       return;
     }
     navigate('/', { replace: true });
@@ -55,18 +82,18 @@ export default function AuthPage() {
     e.preventDefault();
     setError('');
     if (!fullName.trim() || !email.trim() || !password) {
-      setError('Tüm alanları doldur');
+      setError(t('auth.error_required_register'));
       return;
     }
     if (password !== password2) {
-      setError('Şifreler eşleşmiyor');
+      setError(t('auth.error_password_mismatch'));
       return;
     }
     setLoading(true);
     const { error: err } = await signUp(email.trim(), password, fullName.trim());
     setLoading(false);
     if (err) {
-      setError(err.message);
+      setError(mapAuthError(err.message, t));
       return;
     }
     setRegisterSuccess(true);
@@ -78,14 +105,14 @@ export default function AuthPage() {
     e.preventDefault();
     setError('');
     if (!email.trim()) {
-      setError('E-posta gerekli');
+      setError(t('auth.error_email_required'));
       return;
     }
     setLoading(true);
     const { error: err } = await resetPassword(email.trim());
     setLoading(false);
     if (err) {
-      setError(err.message);
+      setError(mapAuthError(err.message, t));
       return;
     }
     setForgotSent(true);
@@ -100,10 +127,30 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white w-full px-6 pt-16 pb-10">
+    <div className="relative min-h-screen bg-white dark:bg-gray-900 w-full px-6 pt-16 pb-10">
+      <div className="absolute top-4 right-4 flex gap-1 z-10">
+        {[
+          { code: 'tr' },
+          { code: 'en' },
+          { code: 'fr' },
+        ].map(lang => (
+          <button
+            key={lang.code}
+            type="button"
+            onClick={() => void setLanguage(lang.code)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
+              language === lang.code
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600'
+            }`}
+          >
+            {lang.code.toUpperCase()}
+          </button>
+        ))}
+      </div>
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-blue-600 mb-2">Zeeky</h1>
-        <p className="text-sm text-gray-500">Kişisel yapay zeka yaşam koçun</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('auth.tagline')}</p>
       </div>
 
       {!forgotMode ? (
@@ -121,7 +168,7 @@ export default function AuthPage() {
                 tab === 'login' ? 'bg-white shadow text-blue-600' : 'text-gray-500',
               )}
             >
-              Giriş Yap
+              {t('auth.sign_in')}
             </button>
             <button
               type="button"
@@ -135,13 +182,13 @@ export default function AuthPage() {
                 tab === 'register' ? 'bg-white shadow text-blue-600' : 'text-gray-500',
               )}
             >
-              Kayıt Ol
+              {t('auth.sign_up')}
             </button>
           </div>
 
           {registerSuccess && tab === 'login' && (
-            <p className="mb-4 text-sm text-green-600 text-center bg-green-50 rounded-xl px-3 py-2">
-              E-posta adresinize doğrulama linki gönderdik. Giriş yapabilirsin.
+            <p className="mb-4 text-sm text-green-600 text-center bg-green-50 dark:bg-green-950/40 rounded-xl px-3 py-2">
+              {t('auth.success_register')}
             </p>
           )}
 
@@ -151,19 +198,20 @@ export default function AuthPage() {
 
           {tab === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-center">{t('auth.welcome_back')}</h2>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">E-posta</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">{t('auth.email')}</label>
                 <input
                   type="email"
                   autoComplete="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className={inputCls}
-                  placeholder="ornek@email.com"
+                  placeholder={t('auth.email_placeholder')}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Şifre</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">{t('auth.password')}</label>
                 <div className="relative">
                   <input
                     type={showPw ? 'text' : 'password'}
@@ -171,7 +219,7 @@ export default function AuthPage() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     className={cn(inputCls, 'pr-12')}
-                    placeholder="••••••••"
+                    placeholder={t('auth.password_placeholder')}
                   />
                   <button
                     type="button"
@@ -191,7 +239,7 @@ export default function AuthPage() {
                 }}
                 className="text-sm text-blue-600 font-medium"
               >
-                Şifremi Unuttum
+                {t('auth.forgot_password')}
               </button>
               <button
                 type="submit"
@@ -199,35 +247,50 @@ export default function AuthPage() {
                 className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 mt-2"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Giriş Yap
+                {t('auth.sign_in_button')}
               </button>
+              <p className="text-center text-sm text-gray-500 dark:text-gray-400 pt-1">
+                {t('auth.no_account')}{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab('register');
+                    setError('');
+                    setRegisterSuccess(false);
+                  }}
+                  className="text-blue-600 font-semibold"
+                >
+                  {t('auth.sign_up')}
+                </button>
+              </p>
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-center">{t('auth.create_account')}</h2>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Ad Soyad</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">{t('auth.full_name')}</label>
                 <input
                   type="text"
                   autoComplete="name"
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
                   className={inputCls}
-                  placeholder="Adınız Soyadınız"
+                  placeholder={t('auth.name_placeholder')}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">E-posta</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">{t('auth.email')}</label>
                 <input
                   type="email"
                   autoComplete="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className={inputCls}
-                  placeholder="ornek@email.com"
+                  placeholder={t('auth.email_placeholder')}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Şifre</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">{t('auth.password')}</label>
                 <div className="relative">
                   <input
                     type={showPw ? 'text' : 'password'}
@@ -235,7 +298,7 @@ export default function AuthPage() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     className={cn(inputCls, 'pr-12')}
-                    placeholder="••••••••"
+                    placeholder={t('auth.password_placeholder')}
                   />
                   <button
                     type="button"
@@ -247,7 +310,7 @@ export default function AuthPage() {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Şifre tekrar</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">{t('auth.password_repeat')}</label>
                 <div className="relative">
                   <input
                     type={showPw2 ? 'text' : 'password'}
@@ -255,7 +318,7 @@ export default function AuthPage() {
                     value={password2}
                     onChange={e => setPassword2(e.target.value)}
                     className={cn(inputCls, 'pr-12')}
-                    placeholder="••••••••"
+                    placeholder={t('auth.password_placeholder')}
                   />
                   <button
                     type="button"
@@ -272,8 +335,22 @@ export default function AuthPage() {
                 className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 mt-2"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Kayıt Ol
+                {t('auth.sign_up_button')}
               </button>
+              <p className="text-center text-sm text-gray-500 dark:text-gray-400 pt-1">
+                {t('auth.has_account')}{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab('login');
+                    setError('');
+                    setRegisterSuccess(false);
+                  }}
+                  className="text-blue-600 font-semibold"
+                >
+                  {t('auth.sign_in')}
+                </button>
+              </p>
             </form>
           )}
         </>
@@ -288,26 +365,28 @@ export default function AuthPage() {
             }}
             className="text-sm text-blue-600 font-medium mb-6"
           >
-            ← Girişe dön
+            {t('auth.back_to_login')}
           </button>
           {forgotSent ? (
-            <p className="text-center text-gray-600 text-sm bg-gray-50 rounded-xl px-4 py-6">
-              E-postanızı kontrol edin. Şifre sıfırlama linki gönderildi.
-            </p>
+            <div className="text-center bg-gray-50 dark:bg-gray-800/80 rounded-xl px-4 py-6 space-y-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('auth.check_email')}</h2>
+              <p className="text-gray-600 dark:text-gray-300 text-sm">{t('auth.reset_sent')}</p>
+            </div>
           ) : (
             <form onSubmit={handleForgot} className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-center">{t('auth.reset_password')}</h2>
               {error && (
-                <p className="text-sm text-red-600 text-center bg-red-50 rounded-xl px-3 py-2">{error}</p>
+                <p className="text-sm text-red-600 text-center bg-red-50 dark:bg-red-950/30 rounded-xl px-3 py-2">{error}</p>
               )}
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">E-posta</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">{t('auth.email')}</label>
                 <input
                   type="email"
                   autoComplete="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className={inputCls}
-                  placeholder="ornek@email.com"
+                  placeholder={t('auth.email_placeholder')}
                 />
               </div>
               <button
@@ -316,7 +395,7 @@ export default function AuthPage() {
                 className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Sıfırlama Linki Gönder
+                {loading ? t('auth.sending') : t('auth.send_reset_link')}
               </button>
             </form>
           )}

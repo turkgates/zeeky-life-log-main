@@ -25,6 +25,8 @@ export interface Activity {
   created_via?: string;
   raw_message?: string | null;
   is_favorite?: boolean;
+  quantity?: number | null;
+  quantity_unit?: string | null;
 }
 
 export interface Suggestion {

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Pencil, Trash2, Calendar, RefreshCw, FileText, ChevronLeft, Loader2, X as XIcon } from 'lucide-react';
+import { Pencil, Trash2, Calendar, RefreshCw, FileText, ChevronLeft, Loader2, X as XIcon, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Transaction,
@@ -7,20 +7,8 @@ import {
   updateTransaction,
 } from '@/lib/transactionSupabase';
 import { toast } from 'sonner';
-
-const MONTH_NAMES = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-const DAY_NAMES   = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00');
-  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}, ${DAY_NAMES[d.getDay()]}`;
-}
-function getFrequencyLabel(f: string) {
-  if (f === 'daily')   return 'Günlük';
-  if (f === 'weekly')  return 'Haftalık';
-  if (f === 'monthly') return 'Aylık';
-  return 'Tek seferlik';
-}
+import { useTranslation } from 'react-i18next';
+import { translateFinanceCategory, getSubcategory } from '@/lib/categoryTranslations';
 
 interface Props {
   userId: string;
@@ -36,6 +24,8 @@ export default function TransactionDetailSheet({
   userId,
   transaction, categories, currencySymbol, onClose, onSaved, onDelete,
 }: Props) {
+  const { t, i18n } = useTranslation();
+
   const [editMode,          setEditMode]          = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRecurringAsk,  setShowRecurringAsk]  = useState(false);
@@ -57,6 +47,22 @@ export default function TransactionDetailSheet({
 
   if (!transaction) return null;
 
+  const locale =
+    i18n.language === 'en' ? 'en-US' :
+    i18n.language === 'fr' ? 'fr-FR' : 'tr-TR';
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
+  };
+
+  const getFrequencyLabel = (f: string) => {
+    if (f === 'daily')   return t('finance.freq_daily');
+    if (f === 'weekly')  return t('finance.weekly');
+    if (f === 'monthly') return t('finance.monthly');
+    return t('finance.freq_none');
+  };
+
   const catInfo = categories.find(c => c.name === transaction.category);
 
   // ── Enter edit ───────────────────────────────────────────────────────────
@@ -73,7 +79,7 @@ export default function TransactionDetailSheet({
 
   // ── Save ─────────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!editTitle.trim() || !editAmount) { toast.error('Başlık ve tutar zorunlu'); return; }
+    if (!editTitle.trim() || !editAmount) { toast.error(t('finance.error_title_amount')); return; }
     setSaving(true);
     const ok = await updateTransaction(userId, transaction.id, {
       title:            editTitle.trim(),
@@ -85,8 +91,8 @@ export default function TransactionDetailSheet({
       frequency:        editFreq,
     });
     setSaving(false);
-    if (ok) { toast.success('İşlem güncellendi ✅'); onSaved(); onClose(); }
-    else toast.error('Kaydedilemedi');
+    if (ok) { toast.success(t('finance.update_success')); onSaved(); onClose(); }
+    else toast.error(t('finance.error_save_failed'));
   };
 
   // ── Delete ───────────────────────────────────────────────────────────────
@@ -127,42 +133,42 @@ export default function TransactionDetailSheet({
               <button onClick={() => setEditMode(false)} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <h2 className="text-base font-semibold flex-1">İşlemi Düzenle</h2>
+              <h2 className="text-base font-semibold flex-1">{t('finance.edit_transaction')}</h2>
             </div>
 
             {/* Type */}
             <div className="flex bg-muted rounded-xl p-1">
               <button onClick={() => setEditType('income')}
                 className={cn("flex-1 py-2 rounded-lg text-sm font-semibold transition-colors", editType === 'income' ? "bg-success text-white" : "text-muted-foreground")}>
-                Gelir
+                {t('finance.income')}
               </button>
               <button onClick={() => setEditType('expense')}
                 className={cn("flex-1 py-2 rounded-lg text-sm font-semibold transition-colors", editType === 'expense' ? "bg-destructive text-white" : "text-muted-foreground")}>
-                Gider
+                {t('finance.expense')}
               </button>
             </div>
 
             {/* Title */}
             <div>
-              <label className={labelCls}>Başlık</label>
+              <label className={labelCls}>{t('finance.form.title')}</label>
               <input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} className={fieldCls} />
             </div>
 
             {/* Amount + Date */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Tutar ({currencySymbol})</label>
+                <label className={labelCls}>{t('finance.form.amount')} ({currencySymbol})</label>
                 <input type="number" value={editAmount} onChange={e => setEditAmount(e.target.value)} min="0" step="0.01" className={fieldCls} />
               </div>
               <div>
-                <label className={labelCls}>Tarih</label>
+                <label className={labelCls}>{t('finance.form.date')}</label>
                 <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className={fieldCls} />
               </div>
             </div>
 
             {/* Category */}
             <div>
-              <label className={labelCls}>Kategori</label>
+              <label className={labelCls}>{t('finance.form.category')}</label>
               <div className="grid grid-cols-4 gap-2">
                 {categories.filter(c => c.type === editType || c.type === 'both').map(c => (
                   <button
@@ -174,7 +180,7 @@ export default function TransactionDetailSheet({
                     )}
                   >
                     <span className="text-lg">{c.icon}</span>
-                    <span className="text-[9px] font-medium text-center leading-tight">{c.name}</span>
+                    <span className="text-[9px] font-medium text-center leading-tight">{translateFinanceCategory(t, c.name)}</span>
                   </button>
                 ))}
               </div>
@@ -182,7 +188,7 @@ export default function TransactionDetailSheet({
 
             {/* Frequency */}
             <div>
-              <label className={labelCls}>Tekrar</label>
+              <label className={labelCls}>{t('finance.frequency')}</label>
               <div className="flex gap-2 flex-wrap">
                 {(['none', 'daily', 'weekly', 'monthly'] as Transaction['frequency'][]).map(f => (
                   <button
@@ -193,7 +199,7 @@ export default function TransactionDetailSheet({
                       editFreq === f ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"
                     )}
                   >
-                    {f === 'none' ? 'Yok' : f === 'daily' ? 'Günlük' : f === 'weekly' ? 'Haftalık' : 'Aylık'}
+                    {getFrequencyLabel(f)}
                   </button>
                 ))}
               </div>
@@ -201,7 +207,7 @@ export default function TransactionDetailSheet({
 
             {/* Note */}
             <div>
-              <label className={labelCls}>Açıklama</label>
+              <label className={labelCls}>{t('finance.form.description')}</label>
               <textarea value={editNote} onChange={e => setEditNote(e.target.value)} className={cn(fieldCls, "resize-none")} rows={3} />
             </div>
 
@@ -210,13 +216,13 @@ export default function TransactionDetailSheet({
               className="w-full py-3 rounded-xl bg-accent text-accent-foreground font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Kaydet
+              {t('finance.save')}
             </button>
             <button
               onClick={() => setEditMode(false)}
               className="w-full py-3 rounded-xl bg-muted text-muted-foreground font-semibold text-sm"
             >
-              İptal
+              {t('finance.cancel')}
             </button>
           </div>
 
@@ -236,17 +242,19 @@ export default function TransactionDetailSheet({
                     "inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full mt-0.5",
                     transaction.type === 'income' ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
                   )}>
-                    {transaction.type === 'income' ? 'Gelir' : 'Gider'}
+                    {transaction.type === 'income' ? t('finance.income') : t('finance.expense')}
                   </span>
                 </div>
               </div>
               <div className="flex gap-1.5">
                 <button onClick={enterEdit}
-                  className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center active:scale-90 transition-transform">
+                  className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center active:scale-90 transition-transform"
+                  aria-label={t('finance.edit_transaction')}>
                   <Pencil className="w-4 h-4 text-accent" />
                 </button>
                 <button onClick={triggerDelete}
-                  className="w-9 h-9 rounded-full bg-destructive/10 flex items-center justify-center active:scale-90 transition-transform">
+                  className="w-9 h-9 rounded-full bg-destructive/10 flex items-center justify-center active:scale-90 transition-transform"
+                  aria-label={t('finance.delete')}>
                   <Trash2 className="w-4 h-4 text-destructive" />
                 </button>
               </div>
@@ -255,15 +263,16 @@ export default function TransactionDetailSheet({
             {/* Amount */}
             <div className="text-center mb-6">
               <p className={cn("text-3xl font-bold", transaction.type === 'income' ? "text-success" : "text-destructive")}>
-                {transaction.type === 'income' ? '+' : '-'}{transaction.amount.toLocaleString('tr-TR')} {currencySymbol}
+                {transaction.type === 'income' ? '+' : '-'}{transaction.amount.toLocaleString(locale)} {currencySymbol}
               </p>
             </div>
 
             {/* Details */}
             {[
-              { icon: <Calendar className="w-4 h-4" />,    label: 'Tarih',   value: formatDate(transaction.date) },
-              { icon: <RefreshCw className="w-4 h-4" />,   label: 'Tekrar',  value: getFrequencyLabel(transaction.frequency) },
-              ...(transaction.description ? [{ icon: <FileText className="w-4 h-4" />, label: 'Açıklama', value: transaction.description }] : []),
+              { icon: <Calendar className="w-4 h-4" />,  label: t('finance.form.date'),  value: formatDate(transaction.date) },
+              { icon: <RefreshCw className="w-4 h-4" />,  label: t('finance.recurrence'),  value: getFrequencyLabel(transaction.frequency) },
+              ...(transaction.subcategory ? [{ icon: <FolderOpen className="w-4 h-4" />, label: t('finance.subcategory'), value: getSubcategory(transaction.category, transaction.subcategory) }] : []),
+              ...(transaction.description ? [{ icon: <FileText className="w-4 h-4" />, label: t('finance.form.description'), value: transaction.description }] : []),
             ].map((row, i, arr) => (
               <div key={i} className={cn("flex items-center gap-3 py-3", i < arr.length - 1 && "border-b border-border")}>
                 <span className="text-muted-foreground">{row.icon}</span>
@@ -279,13 +288,13 @@ export default function TransactionDetailSheet({
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/40" onClick={() => setShowDeleteConfirm(false)}>
           <div className="bg-card rounded-2xl p-6 mx-8 shadow-xl" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-center mb-4">Bu işlemi silmek istediğine emin misin?</p>
+            <p className="text-sm font-medium text-center mb-4">{t('finance.delete_confirm')}</p>
             <div className="flex gap-3">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">İptal</button>
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">{t('finance.cancel')}</button>
               <button
                 onClick={async () => { setShowDeleteConfirm(false); await onDelete(transaction.id, {}); }}
                 className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-semibold text-sm"
-              >Sil</button>
+              >{t('finance.delete')}</button>
             </div>
           </div>
         </div>
@@ -294,16 +303,16 @@ export default function TransactionDetailSheet({
       {/* Recurring delete options */}
       {showRecurringAsk && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/40" onClick={() => setShowRecurringAsk(false)}>
-          <div className="bg-card rounded-2xl p-6 mx-8 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-card rounded-2xl p-6 mx-8 shadow-xl relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setShowRecurringAsk(false)} className="absolute top-3 right-3 p-1">
               <XIcon className="w-4 h-4 text-muted-foreground" />
             </button>
-            <p className="text-sm font-medium text-center mb-5">Bu tekrarlı işlemi nasıl silmek istiyorsun?</p>
+            <p className="text-sm font-medium text-center mb-5">{t('finance.recurring_delete_ask')}</p>
             <div className="space-y-2">
               <button
                 onClick={async () => { setShowRecurringAsk(false); await onDelete(transaction.id, {}); }}
                 className="w-full py-3 rounded-xl bg-muted text-foreground font-semibold text-sm"
-              >Sadece bu işlemi</button>
+              >{t('finance.delete_single')}</button>
               <button
                 onClick={async () => {
                   setShowRecurringAsk(false);
@@ -311,7 +320,7 @@ export default function TransactionDetailSheet({
                   await onDelete(transaction.id, { deleteAll: true, parentId });
                 }}
                 className="w-full py-3 rounded-xl bg-destructive text-destructive-foreground font-semibold text-sm"
-              >Tüm tekrarları sil</button>
+              >{t('finance.delete_all_recurring')}</button>
             </div>
           </div>
         </div>
