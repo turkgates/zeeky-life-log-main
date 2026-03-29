@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Filter, Check, X, Heart, Coins, Users, Activity, RefreshCw, Loader2, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -54,14 +54,12 @@ async function fetchSuggestions(
   userId: string,
   status: StatusFilter,
   category: CategoryKey,
-  language: string,
 ): Promise<Suggestion[]> {
   if (!userId) return [];
   let query = supabase
     .from('suggestions')
     .select('*')
     .eq('user_id', userId)
-    .eq('language', language)
     .order('generated_at', { ascending: false });
 
   if (status !== 'all') {
@@ -145,11 +143,10 @@ export default function SuggestionsPage() {
       .delete()
       .eq('user_id', userId)
       .eq('status', 'pending')
-      .eq('language', language)
       .gte('generated_at', `${today}T00:00:00.000Z`);
     setSuggestions([]);
     await generateSuggestions('refresh');
-    const list = await fetchSuggestions(userId, filterStatus, filterCategory, language);
+    const list = await fetchSuggestions(userId, filterStatus, filterCategory);
     setSuggestions(list);
   }, [generateSuggestions, filterStatus, filterCategory, userId, language]);
 
@@ -173,9 +170,6 @@ export default function SuggestionsPage() {
     setSuggestions(prev => prev.filter(s => s.id !== id));
   };
 
-  const prevUserRef = useRef<string | null>(null);
-  const prevLangRef = useRef<string | null>(null);
-
   const loadSuggestions = useCallback(async () => {
     if (!userId) {
       setSuggestions([]);
@@ -190,7 +184,6 @@ export default function SuggestionsPage() {
         .select('id')
         .eq('user_id', userId)
         .eq('status', 'pending')
-        .eq('language', language)
         .gte('generated_at', `${today}T00:00:00.000Z`)
         .lte('generated_at', `${today}T23:59:59.999Z`)
         .limit(1);
@@ -198,36 +191,20 @@ export default function SuggestionsPage() {
       if (!todaySuggestions || todaySuggestions.length === 0) {
         await generateSuggestions('auto');
       }
-      const list = await fetchSuggestions(userId, 'all', 'all', language);
+      const list = await fetchSuggestions(userId, 'all', 'all');
       setSuggestions(list);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, language, generateSuggestions]);
+  }, [userId, generateSuggestions]);
 
   useEffect(() => {
     if (!userId) {
       setSuggestions([]);
       setIsLoading(false);
-      prevUserRef.current = null;
-      prevLangRef.current = null;
       return;
     }
-
-    const userChanged = prevUserRef.current !== userId;
-    if (userChanged) {
-      prevUserRef.current = userId;
-      prevLangRef.current = null;
-    }
-
-    void (async () => {
-      const firstForUser = prevLangRef.current === null;
-      if (!firstForUser && prevLangRef.current !== language) {
-        await supabase.from('suggestions').delete().eq('user_id', userId).eq('status', 'pending');
-      }
-      prevLangRef.current = language;
-      await loadSuggestions();
-    })();
+    void loadSuggestions();
   }, [userId, language, loadSuggestions]);
 
   useEffect(() => {
@@ -244,7 +221,7 @@ export default function SuggestionsPage() {
     setShowFilterSheet(false);
     setIsLoading(true);
     try {
-      const list = await fetchSuggestions(userId, sheetStatus, sheetCategory, language);
+      const list = await fetchSuggestions(userId, sheetStatus, sheetCategory);
       setSuggestions(list);
     } finally {
       setIsLoading(false);

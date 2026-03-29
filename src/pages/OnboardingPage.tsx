@@ -334,6 +334,8 @@ export default function OnboardingPage() {
           .update({ onboarding_completed: true })
           .eq('id', userId);
         setCurrency(formData.currency, formData.currency_symbol);
+        // Splash'ın açılması için bugünkü kaydı sil; App.tsx kontrol edecek
+        localStorage.removeItem(`zeeky_splash_${userId}`);
         navigate('/');
         return;
       }

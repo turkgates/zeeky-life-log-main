@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { useChatStore } from './useChatStore';
 
 interface AuthStore {
   user: User | null;
@@ -13,7 +14,7 @@ interface AuthStore {
 
 let authListenerRegistered = false;
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
@@ -37,7 +38,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (!authListenerRegistered) {
       authListenerRegistered = true;
       supabase.auth.onAuthStateChange((_event, session) => {
-        useAuthStore.setState({
+        const newUserId = session?.user?.id;
+        const currentUserId = get().user?.id;
+
+        if (newUserId !== currentUserId) {
+          useChatStore.getState().clearMessages();
+        }
+
+        set({
           user: session?.user ?? null,
           isAuthenticated: !!session?.user,
           isLoading: false,

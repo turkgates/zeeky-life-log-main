@@ -90,14 +90,15 @@ export default function AuthPage() {
       return;
     }
     setLoading(true);
-    const { error: err } = await signUp(email.trim(), password, fullName.trim());
+    const { data, error } = await signUp(email.trim(), password, fullName.trim());
     setLoading(false);
-    if (err) {
-      setError(mapAuthError(err.message, t));
+    if (error) {
+      console.error('Signup error:', error);
+      console.error('Signup error message:', error.message);
+      console.error('Signup error status:', error.status);
+      setError(mapAuthError(error.message, t));
       return;
     }
-    setRegisterSuccess(true);
-    setTab('login');
     navigate('/onboarding');
   };
 

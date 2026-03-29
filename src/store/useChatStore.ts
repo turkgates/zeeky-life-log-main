@@ -20,6 +20,7 @@ interface ChatStore {
   setOffset: (offset: number) => void
   setHasMore: (hasMore: boolean) => void
   setScrollPosition: (pos: number) => void
+  clearMessages: () => void
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -35,4 +36,5 @@ export const useChatStore = create<ChatStore>((set) => ({
   setOffset: (offset) => set({ offset }),
   setHasMore: (hasMore) => set({ hasMore }),
   setScrollPosition: (scrollPosition) => set({ scrollPosition }),
+  clearMessages: () => set({ messages: [], isLoaded: false }),
 }))

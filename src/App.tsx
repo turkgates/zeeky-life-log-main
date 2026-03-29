@@ -1,7 +1,7 @@
 import { DailySplashScreen } from "@/components/DailySplashScreen";
 import { useCallback, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -101,15 +101,42 @@ function AppRoutes() {
 
 const queryClient = new QueryClient();
 
-function AppShell() {
+function AppShellWithSplash() {
   const initialize = useAuthStore(s => s.initialize);
   const user = useAuthStore(s => s.user);
   const isLoading = useAuthStore(s => s.isLoading);
   const [showSplash, setShowSplash] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     void initialize();
   }, [initialize]);
+
+  const checkUserFlow = useCallback(async () => {
+    if (!user?.id) return;
+
+    const { data } = await supabase
+      .from('users')
+      .select('onboarding_completed')
+      .eq('id', user.id)
+      .single();
+
+    if (!data?.onboarding_completed) {
+      navigate('/onboarding');
+      setShowSplash(false);
+      return;
+    }
+
+    const today = new Date().toDateString();
+    const lastSplash = localStorage.getItem(`zeeky_splash_${user.id}`);
+
+    if (lastSplash !== today) {
+      setShowSplash(true);
+    } else {
+      setShowSplash(false);
+    }
+  }, [user?.id, navigate]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -117,10 +144,8 @@ function AppShell() {
       setShowSplash(false);
       return;
     }
-    const today = new Date().toDateString();
-    const lastSplash = localStorage.getItem(`zeeky_splash_${user.id}`);
-    setShowSplash(lastSplash !== today);
-  }, [user?.id, isLoading]);
+    void checkUserFlow();
+  }, [user?.id, isLoading, location.pathname, checkUserFlow]);
 
   const handleSplashComplete = useCallback(() => {
     if (user?.id) {
@@ -133,9 +158,13 @@ function AppShell() {
     return <DailySplashScreen onComplete={handleSplashComplete} />;
   }
 
+  return <AppRoutes />;
+}
+
+function AppShell() {
   return (
     <BrowserRouter>
-      <AppRoutes />
+      <AppShellWithSplash />
     </BrowserRouter>
   );
 }
