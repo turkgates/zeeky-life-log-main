@@ -35,6 +35,7 @@ import {
   mapRow,
 } from '@/lib/transactionSupabase';
 import { formatDate, getMonthName } from '@/lib/dateLocale';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -882,6 +883,7 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
   onSaved:  () => void;
 }) {
   const { t } = useTranslation();
+  const { settings } = useAppSettings();
   const fieldCls = 'w-full bg-muted rounded-xl px-4 py-3 text-sm outline-none border border-border';
   const [type,        setType]        = useState<'income' | 'expense'>('expense');
   const [amount,      setAmount]      = useState('');
@@ -892,11 +894,47 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
   const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10));
   const [frequency,   setFrequency]   = useState<Recurrence>('none');
   const [saving,      setSaving]      = useState(false);
+  const [txCount,     setTxCount]     = useState(0);
+  const [isPremiumUser, setIsPremiumUser] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    const check = async () => {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('plan_type')
+        .eq('id', userId)
+        .single();
+
+      const premium = userData?.plan_type === 'premium';
+      setIsPremiumUser(premium);
+      if (premium) return;
+
+      const firstOfMonth = new Date();
+      firstOfMonth.setDate(1);
+      firstOfMonth.setHours(0, 0, 0, 0);
+
+      const { count } = await supabase
+        .from('transactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', firstOfMonth.toISOString());
+
+      setTxCount(count ?? 0);
+    };
+    void check();
+  }, [userId]);
+
+  const isTxLimitReached = !isPremiumUser && txCount >= settings.free_monthly_transactions;
 
   const cats = type === 'income' ? INCOME_CATS : EXPENSE_CATS;
   const subs = category ? (type === 'income' ? INCOME_SUBS[category] : EXPENSE_SUBS[category]) ?? [] : [];
 
   const handleSave = async () => {
+    if (isTxLimitReached) {
+      toast.error(t('finance.error_transaction_limit', { limit: settings.free_monthly_transactions }));
+      return;
+    }
     if (!amount || !category) { toast.error(t('finance.error_amount_category')); return; }
     if (!userId) { toast.error(t('finance.error_no_session')); return; }
     setSaving(true);
@@ -1044,10 +1082,18 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
           ))}
         </div>
 
+        {isTxLimitReached && (
+          <div className="mb-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-800">
+            <p className="text-xs text-orange-600 dark:text-orange-400 text-center">
+              {t('finance.transaction_limit_banner', { count: txCount, limit: settings.free_monthly_transactions })}
+            </p>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || isTxLimitReached}
           className="w-full py-3.5 bg-accent text-accent-foreground rounded-xl font-semibold text-sm active:scale-[0.97] transition-transform disabled:opacity-60 flex items-center justify-center gap-2 mb-2"
         >
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}

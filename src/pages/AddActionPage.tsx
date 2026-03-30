@@ -11,6 +11,7 @@ import { FriendAutocomplete } from '@/components/FriendAutocomplete';
 import { useTranslation } from 'react-i18next';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { formatDate } from '@/lib/dateLocale';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 // ── Category definitions (ids & meta stay outside for TypeScript inference) ──
 const CATEGORY_META = [
@@ -80,6 +81,7 @@ export default function AddActionPage() {
   const currencySymbol = useCurrencyStore(s => s.symbol);
   const currencyCode   = useCurrencyStore(s => s.code);
   const { refresh }    = useActivityRefresh();
+  const { settings }   = useAppSettings();
 
   // ── Translated category list (re-computed when language changes) ──────────
   const CATEGORIES = CATEGORY_META.map(c => ({
@@ -103,6 +105,8 @@ export default function AddActionPage() {
   const [loading,  setLoading]  = useState(isEditing);
   const [saving,   setSaving]   = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
+  const [activityCount, setActivityCount] = useState(0);
+  const [isPremiumUser, setIsPremiumUser] = useState(false);
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [title,           setTitle]           = useState('');
@@ -119,6 +123,38 @@ export default function AddActionPage() {
   const [travelDays,      setTravelDays]      = useState('');
   const [quantity,        setQuantity]        = useState('');
   const [quantityUnit,    setQuantityUnit]    = useState('');
+
+  // ── Plan & monthly activity count check ───────────────────────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const checkLimits = async () => {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('plan_type')
+        .eq('id', userId)
+        .single();
+
+      const premium = userData?.plan_type === 'premium';
+      setIsPremiumUser(premium);
+      if (premium) return;
+
+      const firstOfMonth = new Date();
+      firstOfMonth.setDate(1);
+      firstOfMonth.setHours(0, 0, 0, 0);
+
+      const { count } = await supabase
+        .from('activities')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', firstOfMonth.toISOString());
+
+      setActivityCount(count ?? 0);
+    };
+    void checkLimits();
+  }, [userId]);
+
+  const isActivityLimitReached = !isPremiumUser && !isEditing &&
+    activityCount >= settings.free_monthly_activities;
 
   // ── Load existing activity (edit mode) ────────────────────────────────────
   useEffect(() => {
@@ -160,6 +196,10 @@ export default function AddActionPage() {
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (isActivityLimitReached) {
+      toast.error(t('add_action.error_activity_limit', { limit: settings.free_monthly_activities }));
+      return;
+    }
     if (!title.trim()) { toast.error(t('add_action.error_title_empty')); return; }
     if (selCat === 'alışveriş' && !amount) {
       toast.error(t('add_action.error_amount_required')); return;
@@ -680,11 +720,18 @@ export default function AddActionPage() {
 
       {/* ── Fixed Save Button ───────────────────────────────────────────────── */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full px-4 pb-6 pt-3 bg-background/90 backdrop-blur-sm border-t border-border">
+        {isActivityLimitReached && (
+          <div className="mb-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-2xl border border-orange-200 dark:border-orange-800">
+            <p className="text-xs text-orange-600 dark:text-orange-400 text-center">
+              {t('add_action.activity_limit_banner', { count: activityCount, limit: settings.free_monthly_activities })}
+            </p>
+          </div>
+        )}
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || isActivityLimitReached}
           className="w-full py-4 rounded-2xl font-bold text-white text-base active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
-          style={{ backgroundColor: catColor }}
+          style={{ backgroundColor: isActivityLimitReached ? '#94a3b8' : catColor }}
         >
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}
           {isEditing ? t('add_action.update') : t('add_action.save')}

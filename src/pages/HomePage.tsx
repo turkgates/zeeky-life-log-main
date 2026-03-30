@@ -11,6 +11,7 @@ import { useLanguageStore } from '@/store/useLanguageStore';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import WeeklySummaryPage from '@/pages/WeeklySummaryPage';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-chat`;
@@ -79,6 +80,7 @@ export default function HomePage() {
   const refreshActivities = useActivityRefresh(s => s.refresh);
   const { language } = useLanguageStore();
   const { t, i18n } = useTranslation();
+  const { settings } = useAppSettings();
 
   const [userName,         setUserName]         = useState('');
   const [inputText,        setInputText]        = useState('');
@@ -88,6 +90,9 @@ export default function HomePage() {
   const [isRecording,      setIsRecording]      = useState(false);
   const [showWeeklySummary, setShowWeeklySummary] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [messageCount,     setMessageCount]     = useState(0);
+  const [isPremium,        setIsPremium]        = useState(false);
+  const [showMessageLimitUpgrade, setShowMessageLimitUpgrade] = useState(false);
 
   const recognitionRef       = useRef<any>(null);
   const messagesEndRef       = useRef<HTMLDivElement>(null);
@@ -130,6 +135,25 @@ export default function HomePage() {
     };
     void run();
   }, [setUnreadCount, userId]);
+
+  // ── Load user plan & daily message count ──────────────────────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const loadUserPlan = async () => {
+      const { data } = await supabase
+        .from('users')
+        .select('plan_type, daily_message_count, daily_message_date')
+        .eq('id', userId)
+        .single();
+      if (data) {
+        const today = new Date().toISOString().split('T')[0];
+        const isNewDay = data.daily_message_date !== today;
+        setMessageCount(isNewDay ? 0 : (data.daily_message_count as number | null ?? 0));
+        setIsPremium(data.plan_type === 'premium');
+      }
+    };
+    void loadUserPlan();
+  }, [userId]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -308,6 +332,7 @@ export default function HomePage() {
       content: userMessage,
       created_at: new Date().toISOString(),
     });
+    setShowMessageLimitUpgrade(false);
 
     try {
       setIsChatLoading(true);
@@ -336,6 +361,20 @@ export default function HomePage() {
         });
       } finally {
         clearTimeout(timeoutId);
+      }
+
+      if (response.status === 429) {
+        const errData = (await response.json()) as { error?: string; limit?: number };
+        if (errData.error === 'message_limit_reached') {
+          addMessage({
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: t('home.limit_reached', { limit: errData.limit ?? settings.free_daily_messages }),
+            created_at: new Date().toISOString(),
+          });
+          setShowMessageLimitUpgrade(true);
+          return;
+        }
       }
 
       if (!response.ok) {
@@ -373,6 +412,7 @@ export default function HomePage() {
           }
         }
 
+        setMessageCount(c => c + 1);
         refreshActivities();
       } else {
         addMessage({
@@ -395,7 +435,7 @@ export default function HomePage() {
     } finally {
       setIsChatLoading(false);
     }
-  }, [addMessage, refreshActivities, userId, language]);
+  }, [addMessage, refreshActivities, userId, language, settings.free_daily_messages, t]);
 
   const handleSend = useCallback(() => {
     const text = inputText.trim();
@@ -457,7 +497,12 @@ export default function HomePage() {
           </h1>
           <p className="text-xs text-gray-400 capitalize">{todayDate}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {!isPremium && (
+            <span className={`text-xs font-medium tabular-nums ${Math.max(0, settings.free_daily_messages - messageCount) === 0 ? 'text-red-400' : 'text-gray-400'}`}>
+              {t('home.messages_left', { count: Math.max(0, settings.free_daily_messages - messageCount) })}
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setShowWeeklySummary(true)}
@@ -527,6 +572,21 @@ export default function HomePage() {
                 </div>
               </div>
             ))}
+
+            {showMessageLimitUpgrade && (
+              <div className="flex justify-start mb-3">
+                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 mt-1 opacity-0 pointer-events-none select-none" aria-hidden>
+                  Z
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/settings')}
+                  className="mt-0 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl font-medium active:scale-[0.98] transition-transform"
+                >
+                  {t('settings.upgrade_to_premium')}
+                </button>
+              </div>
+            )}
 
             {isChatLoading && (
               <div className="flex justify-start mb-3">

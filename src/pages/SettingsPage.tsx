@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 const DEFAULT_NOTIFICATION_SETTINGS = {
   weekly_summary: true,
@@ -91,6 +92,10 @@ export default function SettingsPage() {
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [aiPersonality, setAiPersonality] = useState<'balanced' | 'strict' | 'gentle'>('balanced');
 
+  const { settings } = useAppSettings();
+  const [isPremiumPlan, setIsPremiumPlan] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
@@ -101,13 +106,14 @@ export default function SettingsPage() {
   useEffect(() => {
     const load = async () => {
       if (!userId) {
+        setIsPremiumPlan(false);
         setPrefsLoading(false);
         return;
       }
       setPrefsLoading(true);
       try {
         const [u, p] = await Promise.all([
-          supabase.from('users').select('currency, currency_symbol').eq('id', userId).single(),
+          supabase.from('users').select('currency, currency_symbol, plan_type').eq('id', userId).single(),
           supabase
             .from('user_profiles')
             .select('ai_personality, notification_enabled, notification_settings')
@@ -118,6 +124,7 @@ export default function SettingsPage() {
           const sym = u.data.currency_symbol || getCurrencySymbol(u.data.currency);
           setGlobalCurrency(u.data.currency, sym);
         }
+        setIsPremiumPlan(u.data?.plan_type === 'premium');
         if (p.data?.ai_personality === 'strict' || p.data?.ai_personality === 'gentle' || p.data?.ai_personality === 'balanced') {
           setAiPersonality(p.data.ai_personality);
         }
@@ -264,6 +271,42 @@ export default function SettingsPage() {
       </div>
 
       <div className="p-4 space-y-3">
+        {/* PREMIUM BÖLÜMÜ — EN ÜSTTE */}
+        <div className="rounded-2xl overflow-hidden border border-blue-200/80 dark:border-blue-900/50 shadow-md bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-lg font-bold">Zeeky Premium</p>
+                <p className="text-sm text-white/85 mt-1">{t('settings.premium_desc')}</p>
+                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                  <div>
+                    <span className="text-white/60 block text-xs">{t('settings.premium_monthly')}</span>
+                    <span className="font-semibold text-lg">{settings.premium_monthly_price}€</span>
+                  </div>
+                  <div>
+                    <span className="text-white/60 block text-xs">{t('settings.premium_yearly')}</span>
+                    <span className="font-semibold text-lg">{settings.premium_yearly_price}€</span>
+                  </div>
+                </div>
+              </div>
+              <span className="text-3xl shrink-0" aria-hidden>✨</span>
+            </div>
+            {isPremiumPlan ? (
+              <p className="mt-4 text-center text-sm font-medium bg-white/15 rounded-xl py-2.5">
+                {t('settings.premium_active')}
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowPremiumModal(true)}
+                className="mt-4 w-full py-3 rounded-xl bg-white text-blue-700 font-semibold text-sm active:scale-[0.99] transition-transform"
+              >
+                {t('settings.upgrade_to_premium')}
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Dil */}
         <div
           className="flex items-center justify-between px-4 py-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm"
@@ -491,6 +534,81 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {showPremiumModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowPremiumModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-3xl p-6 pb-10"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-center mb-6">
+              <div className="text-4xl mb-2">⭐</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Zeeky Premium
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {t('settings.coming_soon_payment')}
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              {[
+                { icon: '💬', text: t('settings.feature_unlimited') },
+                { icon: '⚡', text: t('settings.feature_priority') },
+                { icon: '📊', text: t('settings.feature_insights') },
+                { icon: '🎯', text: t('settings.feature_no_activity_limit') },
+              ].map((f, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-2xl px-4 py-3"
+                >
+                  <span className="text-xl">{f.icon}</span>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {f.text}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 mb-4">
+              <div className="flex-1 border-2 border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-center">
+                <p className="text-xs text-gray-500 mb-1">{t('settings.monthly')}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {settings.premium_monthly_price}€
+                </p>
+                <p className="text-xs text-gray-400">{t('settings.per_month')}</p>
+              </div>
+              <div className="flex-1 border-2 border-blue-500 rounded-2xl p-4 text-center relative">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs px-3 py-0.5 rounded-full">
+                  {t('settings.best_value')}
+                </div>
+                <p className="text-xs text-gray-500 mb-1">{t('settings.yearly')}</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {settings.premium_yearly_price}€
+                </p>
+                <p className="text-xs text-gray-400">{t('settings.per_year')}</p>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-4 mb-4">
+              <p className="text-sm text-blue-600 dark:text-blue-400 text-center">
+                🚀 {t('settings.coming_soon_payment')}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPremiumModal(false)}
+              className="w-full py-3 rounded-2xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-sm font-medium active:opacity-70"
+            >
+              {t('common.close')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
