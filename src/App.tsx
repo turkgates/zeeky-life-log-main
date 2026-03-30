@@ -21,6 +21,8 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import NotFound from "./pages/NotFound";
+import { AdminPage } from "./pages/AdminPage";
+import { AdminRoute } from "@/components/AdminRoute";
 import { getUserCurrency, supabase } from "@/lib/supabase";
 import { useCurrencyStore } from "@/store/useCurrencyStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -90,6 +92,7 @@ function AppRoutes() {
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
             <Route path="*" element={<ProtectedRoute><NotFound /></ProtectedRoute>} />
           </Routes>
         </div>

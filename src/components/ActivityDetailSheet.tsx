@@ -11,6 +11,7 @@ import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useTranslation } from 'react-i18next';
 import { getActivityCategory } from '@/lib/categoryTranslations';
 import { formatActivityDate, activityDateTimeSource } from '@/lib/dateLocale';
+import { formatDuration, getActivityDurationMins } from '@/lib/durationFormat';
 
 interface Props {
   activity: Activity | null;
@@ -34,25 +35,14 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
     i18n.language === 'en' ? 'en-US' :
     i18n.language === 'fr' ? 'fr-FR' : 'tr-TR';
 
-  const formatDuration = (mins: number): string => {
-    if (!mins) return '';
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    const hLabel = t('history.detail.hours');
-    const mLabel = t('history.detail.minutes');
-    if (h > 0 && m > 0) return `${h} ${hLabel} ${m} ${mLabel}`;
-    if (h > 0) return `${h} ${hLabel}`;
-    return `${m} ${mLabel}`;
-  };
-
   const config  = CATEGORY_CONFIG[activity.category] ?? { label: activity.category, color: '#78909C' };
   const details = activity.details || {};
 
   // ── Build detail rows ────────────────────────────────────────────────────
   const companions   = details.companions as string[] | undefined;
   const isAlone      = details.alone as boolean | undefined;
-  const duration     = details.duration as number | undefined;
   const durationText = details.durationText as string | undefined;
+  const durationMins = getActivityDurationMins(activity);
   const amount       = details.amount as number | undefined;
   const subcategory  = details.subcategory as string | undefined;
   const quality      = details.quality as number | undefined;
@@ -87,8 +77,12 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
   } else if (isAlone) {
     rows.push({ icon: <Users className="w-4 h-4" />, label: t('history.detail.with_people'), value: <span className="text-sm">{t('history.detail.alone')}</span> });
   }
-  if (duration) {
-    rows.push({ icon: <Clock className="w-4 h-4" />, label: t('history.detail.duration'), value: <span className="text-sm">{formatDuration(duration)}</span> });
+  if (durationMins != null) {
+    rows.push({
+      icon: <Clock className="w-4 h-4" />,
+      label: t('history.detail.duration'),
+      value: <span className="text-sm">{formatDuration(durationMins, t) ?? ''}</span>,
+    });
   } else if (durationText) {
     rows.push({ icon: <Clock className="w-4 h-4" />, label: t('history.detail.duration'), value: <span className="text-sm">{durationText}</span> });
   }

@@ -141,21 +141,6 @@ export async function fetchAllActivitiesOrdered(userId: string): Promise<Activit
   return (data || []).map(mapRowToActivity);
 }
 
-export async function deleteActivityById(userId: string, id: string): Promise<boolean> {
-  if (!userId) return false;
-  const { error } = await supabase
-    .from('activities')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('deleteActivityById', error);
-    return false;
-  }
-  return true;
-}
-
 export async function fetchActivitiesByDate(userId: string, dateStr: string): Promise<Activity[]> {
   if (!userId) return [];
   const { data, error } = await supabase

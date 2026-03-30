@@ -12,29 +12,6 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useAppSettings } from '@/hooks/useAppSettings';
 
-const DEFAULT_NOTIFICATION_SETTINGS = {
-  weekly_summary: true,
-  budget_alerts: true,
-  sport_reminders: true,
-  social_reminders: true,
-  payment_reminders: true,
-} as const;
-
-type NotificationSettings = typeof DEFAULT_NOTIFICATION_SETTINGS;
-
-function mergeNotificationSettings(raw: unknown): NotificationSettings {
-  if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_NOTIFICATION_SETTINGS };
-  }
-  const o = raw as Record<string, unknown>;
-  return {
-    weekly_summary: o.weekly_summary !== false,
-    budget_alerts: o.budget_alerts !== false,
-    sport_reminders: o.sport_reminders !== false,
-    social_reminders: o.social_reminders !== false,
-    payment_reminders: o.payment_reminders !== false,
-  };
-}
 
 function Toggle({
   on,
@@ -83,10 +60,7 @@ export default function SettingsPage() {
   const { theme, toggle } = useTheme();
   const { t } = useTranslation();
   const { language, setLanguage } = useLanguageStore();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => ({
-    ...DEFAULT_NOTIFICATION_SETTINGS,
-  }));
+  const [notifications, setNotifications] = useState({ daily_motivation: true, weekly_summary: true });
 
   const setGlobalCurrency = useCurrencyStore(s => s.setCurrency);
   const [prefsLoading, setPrefsLoading] = useState(true);
@@ -95,6 +69,7 @@ export default function SettingsPage() {
   const { settings } = useAppSettings();
   const [isPremiumPlan, setIsPremiumPlan] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -113,10 +88,10 @@ export default function SettingsPage() {
       setPrefsLoading(true);
       try {
         const [u, p] = await Promise.all([
-          supabase.from('users').select('currency, currency_symbol, plan_type').eq('id', userId).single(),
+          supabase.from('users').select('currency, currency_symbol, plan_type, is_admin').eq('id', userId).single(),
           supabase
             .from('user_profiles')
-            .select('ai_personality, notification_enabled, notification_settings')
+            .select('ai_personality, notification_settings')
             .eq('user_id', userId)
             .single(),
         ]);
@@ -125,12 +100,16 @@ export default function SettingsPage() {
           setGlobalCurrency(u.data.currency, sym);
         }
         setIsPremiumPlan(u.data?.plan_type === 'premium');
+        setIsAdmin(u.data?.is_admin || false);
         if (p.data?.ai_personality === 'strict' || p.data?.ai_personality === 'gentle' || p.data?.ai_personality === 'balanced') {
           setAiPersonality(p.data.ai_personality);
         }
-        if (p.data) {
-          setNotificationsEnabled(p.data.notification_enabled ?? true);
-          setNotificationSettings(mergeNotificationSettings(p.data.notification_settings));
+        if (p.data?.notification_settings) {
+          const ns = p.data.notification_settings as Record<string, unknown>;
+          setNotifications({
+            daily_motivation: ns.daily_motivation !== false,
+            weekly_summary: ns.weekly_summary !== false,
+          });
         }
       } finally {
         setPrefsLoading(false);
@@ -194,12 +173,16 @@ export default function SettingsPage() {
     toast.success('Zeeky kişiliği güncellendi');
   };
 
-  const handleNotificationToggle = async (value: boolean) => {
+  const allNotificationsEnabled = Object.values(notifications).every(Boolean);
+
+  const toggleAllNotifications = async () => {
     if (!userId) return;
-    setNotificationsEnabled(value);
+    const newValue = !allNotificationsEnabled;
+    const updated = { daily_motivation: newValue, weekly_summary: newValue };
+    setNotifications(updated);
     const { error } = await supabase
       .from('user_profiles')
-      .update({ notification_enabled: value })
+      .update({ notification_settings: updated })
       .eq('user_id', userId);
     if (error) {
       console.error(error);
@@ -207,13 +190,13 @@ export default function SettingsPage() {
     }
   };
 
-  const handleCategoryToggle = async (key: keyof NotificationSettings, value: boolean) => {
+  const updateNotification = async (key: string, value: boolean) => {
     if (!userId) return;
-    const next = { ...notificationSettings, [key]: value };
-    setNotificationSettings(next);
+    const updated = { ...notifications, [key]: value };
+    setNotifications(updated);
     const { error } = await supabase
       .from('user_profiles')
-      .update({ notification_settings: next })
+      .update({ notification_settings: updated })
       .eq('user_id', userId);
     if (error) {
       console.error(error);
@@ -493,37 +476,63 @@ export default function SettingsPage() {
               </div>
             </div>
             <Toggle
-              value={notificationsEnabled}
-              onChange={v => void handleNotificationToggle(v)}
+              value={allNotificationsEnabled}
+              onChange={() => void toggleAllNotifications()}
               disabled={!userId || prefsLoading}
             />
           </div>
           {([
-            { key: 'weekly_summary' as const, labelKey: 'settings.weekly_summary', icon: '📊' },
-            { key: 'budget_alerts' as const, labelKey: 'settings.budget_alerts', icon: '💰' },
-            { key: 'sport_reminders' as const, labelKey: 'settings.sport_reminders', icon: '🏃' },
-            { key: 'social_reminders' as const, labelKey: 'settings.social_reminders', icon: '👥' },
-            { key: 'payment_reminders' as const, labelKey: 'settings.payment_reminders', icon: '📅' },
-          ]).map(item => (
+            {
+              key: 'daily_motivation',
+              icon: '💪',
+              label: t('settings.notif_daily_motivation'),
+              desc: t('settings.notif_daily_motivation_desc'),
+            },
+            {
+              key: 'weekly_summary',
+              icon: '📊',
+              label: t('settings.notif_weekly_summary'),
+              desc: t('settings.notif_weekly_summary_desc'),
+            },
+          ] as const).map(item => (
             <div
               key={item.key}
-              className={cn(
-                'flex items-center justify-between px-4 py-3 border-b border-gray-100 last:border-0 dark:border-border',
-                !notificationsEnabled && 'opacity-40',
-              )}
+              className="flex items-center justify-between px-4 py-3 border-b border-gray-100 last:border-0 dark:border-border"
             >
               <div className="flex items-center gap-3">
                 <span>{item.icon}</span>
-                <p className="text-sm text-gray-700 dark:text-foreground/90">{t(item.labelKey)}</p>
+                <div>
+                  <p className="text-sm text-gray-700 dark:text-foreground/90">{item.label}</p>
+                  <p className="text-xs text-gray-400 dark:text-muted-foreground">{item.desc}</p>
+                </div>
               </div>
               <Toggle
-                value={notificationSettings[item.key] ?? true}
-                onChange={v => void handleCategoryToggle(item.key, v)}
-                disabled={!notificationsEnabled || !userId || prefsLoading}
+                value={notifications[item.key] ?? true}
+                onChange={v => void updateNotification(item.key, v)}
+                disabled={!userId || prefsLoading}
               />
             </div>
           ))}
         </div>
+
+        {/* Admin Paneli */}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => navigate('/admin')}
+            className="flex items-center justify-between w-full px-4 py-4 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center">
+                🛡️
+              </div>
+              <p className="font-medium text-sm text-red-700 dark:text-red-400">
+                Admin Paneli
+              </p>
+            </div>
+            <span className="text-red-400">›</span>
+          </button>
+        )}
 
         {/* About */}
         <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">

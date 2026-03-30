@@ -914,11 +914,17 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
       firstOfMonth.setDate(1);
       firstOfMonth.setHours(0, 0, 0, 0);
 
+      const lastOfMonth = new Date();
+      lastOfMonth.setMonth(lastOfMonth.getMonth() + 1);
+      lastOfMonth.setDate(0);
+      lastOfMonth.setHours(23, 59, 59, 999);
+
       const { count } = await supabase
         .from('transactions')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
-        .gte('created_at', firstOfMonth.toISOString());
+        .gte('transaction_date', firstOfMonth.toISOString())
+        .lte('transaction_date', lastOfMonth.toISOString());
 
       setTxCount(count ?? 0);
     };

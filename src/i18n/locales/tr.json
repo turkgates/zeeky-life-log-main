@@ -536,11 +536,10 @@
     "personality_strict_desc": "Direkt ve sonuç odaklı",
     "personality_gentle": "Nazik",
     "personality_gentle_desc": "Anlayışlı ve destekleyici",
-    "weekly_summary": "Haftalık özet",
-    "budget_alerts": "Bütçe uyarıları",
-    "sport_reminders": "Spor hatırlatmaları",
-    "social_reminders": "Sosyal hatırlatmalar",
-    "payment_reminders": "Ödeme hatırlatmaları"
+    "notif_daily_motivation": "Günlük motivasyon",
+    "notif_daily_motivation_desc": "Her gün kişisel motivasyon mesajı",
+    "notif_weekly_summary": "Haftalık özet",
+    "notif_weekly_summary_desc": "Haftanın özeti ve değerlendirmesi"
   },
   "notifications": {
     "title": "Bildirimler",
@@ -567,9 +566,10 @@
     "activity_name_placeholder": "Ne yaptın?",
     "category": "Kategori",
     "date": "Tarih",
-    "duration": "Süre (ss:dd)",
-    "duration_optional": "Süre (ss:dd, opsiyonel)",
-    "duration_placeholder": "ss:dd",
+    "duration": "Süre",
+    "duration_optional": "Süre (opsiyonel)",
+    "duration_placeholder": "30",
+    "duration_hint": "Saat:Dakika formatında girin (örn: 01:30 = 1.5 saat)",
     "calories": "Kalori (opsiyonel)",
     "amount": "Tutar",
     "amount_required": "Tutar *",
@@ -895,6 +895,9 @@
     "refresh": "Yenile",
     "back": "Geri",
     "save": "Kaydet",
-    "optional": "opsiyonel"
+    "optional": "opsiyonel",
+    "minutes": "dakika",
+    "hours": "saat",
+    "days": "gün"
   }
 }

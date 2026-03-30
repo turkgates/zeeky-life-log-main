@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Loader2, Star } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +12,13 @@ import { useTranslation } from 'react-i18next';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { formatDate } from '@/lib/dateLocale';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import {
+  MAX_DURATION_PICKER_MINS,
+  minsToHoursAndMins,
+  snapMinutesToFiveStep,
+} from '@/lib/durationFormat';
+
+const MINUTE_SELECT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55] as const;
 
 // ── Category definitions (ids & meta stay outside for TypeScript inference) ──
 const CATEGORY_META = [
@@ -50,17 +57,79 @@ const ALL_CATEGORY_IDS = CATEGORY_META.map(c => c.id) as string[];
 const LEGACY_IDS = ['gittim', 'yaptim', 'uyudum', 'izledim', 'spor', 'sağlık', 'iş'];
 const VALID_IDS = [...ALL_CATEGORY_IDS, ...LEGACY_IDS];
 
-// ── Duration helpers ─────────────────────────────────────────────────────────
-function minsToTime(mins: number): string {
-  if (!mins) return '00:30';
-  const h = Math.floor(mins / 60).toString().padStart(2, '0');
-  const m = (mins % 60).toString().padStart(2, '0');
-  return `${h}:${m}`;
-}
+function DurationDropdownField({
+  label,
+  valueMins,
+  onChangeMins,
+  hint,
+}: {
+  label: ReactNode;
+  valueMins: number | null;
+  onChangeMins: (v: number | null) => void;
+  hint?: string;
+}) {
+  const { t } = useTranslation();
+  const selectCls =
+    'w-full border border-gray-200 dark:border-gray-600 rounded-2xl px-4 py-3 text-sm bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-400 appearance-none text-center';
 
-function timeToMins(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return (h * 60) + (m || 0);
+  const capped = Math.min(valueMins ?? 0, MAX_DURATION_PICKER_MINS);
+  const { hours: hRaw, minutes: mRaw } = minsToHoursAndMins(capped);
+  const durationHours = Math.min(23, hRaw);
+  const durationMins = snapMinutesToFiveStep(mRaw);
+
+  return (
+    <div>
+      <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">{label}</label>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 flex items-center gap-2">
+          <select
+            value={durationHours}
+            onChange={e => {
+              const h = parseInt(e.target.value, 10);
+              const total = h * 60 + durationMins;
+              onChangeMins(total > 0 ? total : null);
+            }}
+            className={selectCls}
+          >
+            {Array.from({ length: 24 }, (_, i) => (
+              <option key={i} value={i}>
+                {String(i).padStart(2, '0')}
+              </option>
+            ))}
+          </select>
+          <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            {t('common.hours')}
+          </span>
+        </div>
+
+        <span className="text-gray-400 font-bold">:</span>
+
+        <div className="flex-1 flex items-center gap-2">
+          <select
+            value={durationMins}
+            onChange={e => {
+              const m = parseInt(e.target.value, 10);
+              const total = durationHours * 60 + m;
+              onChangeMins(total > 0 ? total : null);
+            }}
+            className={selectCls}
+          >
+            {MINUTE_SELECT_OPTIONS.map(m => (
+              <option key={m} value={m}>
+                {String(m).padStart(2, '0')}
+              </option>
+            ))}
+          </select>
+          <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            {t('common.minutes')}
+          </span>
+        </div>
+      </div>
+      {hint ? (
+        <p className="text-xs text-gray-400 mt-1 ml-1 dark:text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
+  );
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
@@ -112,7 +181,7 @@ export default function AddActionPage() {
   const [title,           setTitle]           = useState('');
   const [date,            setDate]            = useState(new Date().toISOString().slice(0, 10));
   const [isFavorite,      setIsFavorite]      = useState(false);
-  const [duration,        setDuration]        = useState('');   // minutes
+  const [activityDurationMins, setActivityDurationMins] = useState<number | null>(null);
   const [calories,        setCalories]        = useState('');
   const [people,          setPeople]          = useState<string[]>([]);
   const [location_,       setLocation_]       = useState('');
@@ -142,11 +211,17 @@ export default function AddActionPage() {
       firstOfMonth.setDate(1);
       firstOfMonth.setHours(0, 0, 0, 0);
 
+      const lastOfMonth = new Date();
+      lastOfMonth.setMonth(lastOfMonth.getMonth() + 1);
+      lastOfMonth.setDate(0);
+      lastOfMonth.setHours(23, 59, 59, 999);
+
       const { count } = await supabase
         .from('activities')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
-        .gte('created_at', firstOfMonth.toISOString());
+        .gte('activity_date', firstOfMonth.toISOString())
+        .lte('activity_date', lastOfMonth.toISOString());
 
       setActivityCount(count ?? 0);
     };
@@ -175,7 +250,9 @@ export default function AddActionPage() {
           const d = new Date(data.activity_date as string);
           setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
         }
-        if (data.duration_mins) setDuration(String(data.duration_mins as number));
+        if (data.duration_mins != null && Number(data.duration_mins) > 0) {
+          setActivityDurationMins(Number(data.duration_mins));
+        }
         setIsFavorite(data.is_favorite ?? false);
         setLocation_(typeof data.location === 'string' ? data.location : '');
         setPeople(Array.isArray(data.people) ? (data.people as string[]) : []);
@@ -213,8 +290,9 @@ export default function AddActionPage() {
       let durationMins: number | null = null;
       if (selCat === 'seyahat' && travelDays) {
         durationMins = parseInt(travelDays) * 1440;
-      } else if (duration) {
-        durationMins = parseInt(duration);
+      } else {
+        durationMins =
+          activityDurationMins != null && activityDurationMins > 0 ? activityDurationMins : null;
       }
 
       const activityPayload = {
@@ -413,12 +491,17 @@ export default function AddActionPage() {
         {/* ── sağlık-spor ── */}
         {selCat === 'sağlık-spor' && (
           <>
-            <div>
-              <label className={labelCls}>{t('add_action.duration')}</label>
-              <input type="time" value={minsToTime(parseInt(duration) || 0)}
-                onChange={e => setDuration(String(timeToMins(e.target.value)))}
-                className={inputCls} />
-            </div>
+            <DurationDropdownField
+              label={
+                <>
+                  {t('add_action.duration')}
+                  <span className="text-gray-400 text-xs ml-1">({t('common.optional')})</span>
+                </>
+              }
+              valueMins={activityDurationMins}
+              onChangeMins={setActivityDurationMins}
+              hint={t('add_action.duration_hint')}
+            />
             <div>
               <label className={labelCls}>{t('add_action.calories')}</label>
               <input type="number" value={calories} onChange={e => setCalories(e.target.value)}
@@ -462,12 +545,17 @@ export default function AddActionPage() {
         {/* ── iş-eğitim ── */}
         {selCat === 'iş-eğitim' && (
           <>
-            <div>
-              <label className={labelCls}>{t('add_action.duration')}</label>
-              <input type="time" value={minsToTime(parseInt(duration) || 0)}
-                onChange={e => setDuration(String(timeToMins(e.target.value)))}
-                className={inputCls} />
-            </div>
+            <DurationDropdownField
+              label={
+                <>
+                  {t('add_action.duration')}
+                  <span className="text-gray-400 text-xs ml-1">({t('common.optional')})</span>
+                </>
+              }
+              valueMins={activityDurationMins}
+              onChangeMins={setActivityDurationMins}
+              hint={t('add_action.duration_hint')}
+            />
             <div>
               <label className={labelCls}>{t('add_action.project')}</label>
               <input type="text" value={project} onChange={e => setProject(e.target.value)}
@@ -634,12 +722,12 @@ export default function AddActionPage() {
         {/* ── ev-yaşam ── */}
         {selCat === 'ev-yaşam' && (
           <>
-            <div>
-              <label className={labelCls}>{t('add_action.duration_optional')}</label>
-              <input type="time" value={minsToTime(parseInt(duration) || 0)}
-                onChange={e => setDuration(String(timeToMins(e.target.value)))}
-                className={inputCls} />
-            </div>
+            <DurationDropdownField
+              label={t('add_action.duration_optional')}
+              valueMins={activityDurationMins}
+              onChangeMins={setActivityDurationMins}
+              hint={t('add_action.duration_hint')}
+            />
             <div>
               <label className={labelCls}>{t('add_action.description')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
@@ -691,12 +779,12 @@ export default function AddActionPage() {
         {/* ── diğer ── */}
         {selCat === 'diğer' && (
           <>
-            <div>
-              <label className={labelCls}>{t('add_action.duration_optional')}</label>
-              <input type="time" value={minsToTime(parseInt(duration) || 0)}
-                onChange={e => setDuration(String(timeToMins(e.target.value)))}
-                className={inputCls} />
-            </div>
+            <DurationDropdownField
+              label={t('add_action.duration_optional')}
+              valueMins={activityDurationMins}
+              onChangeMins={setActivityDurationMins}
+              hint={t('add_action.duration_hint')}
+            />
             <div>
               <label className={labelCls}>{t('add_action.description')}</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)}

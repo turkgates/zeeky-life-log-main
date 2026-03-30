@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2, Search, X } from 'lucide-react';
+import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2, Search, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getActivityCategory } from '@/lib/categoryTranslations';
 import { HighlightMatch } from '@/components/HighlightMatch';
@@ -12,11 +12,20 @@ import { toast } from 'sonner';
 import {
   fetchActivitiesByDate,
   fetchFavoriteActivities,
-  deleteActivityById,
   FavoriteActivity,
   mapRowToActivity,
 } from '@/lib/activitySupabase';
 import { supabase } from '@/lib/supabase';
+
+const deleteActivityById = async (id: string) => {
+  const { error } = await supabase
+    .from('activities')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+  return true;
+};
 import { Activity } from '@/types/zeeky';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
 import { useActivityRefresh } from '@/store/useActivityRefresh';
@@ -29,6 +38,7 @@ import {
   formatActivityDate,
   activityDateTimeSource,
 } from '@/lib/dateLocale';
+import { formatDuration, getActivityDurationMins } from '@/lib/durationFormat';
 
 function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -210,11 +220,13 @@ export default function HistoryPage() {
 
   // Handlers
   const handleDeleteConfirm = async (id: string) => {
-    const ok = await deleteActivityById(userId, id);
-    if (ok) {
+    try {
+      await deleteActivityById(id);
       void loadDayActivities(selectedDate);
       void loadDatesForMonth(viewYear, viewMonth);
       if (searchQuery.length >= 2) void searchAllActivities(searchQuery);
+    } catch (e) {
+      console.error('deleteActivityById', e);
     }
     setDeleteConfirm(null);
     setSwipedCardId(null);
@@ -326,7 +338,15 @@ export default function HistoryPage() {
       <div className="sticky top-0 z-10 bg-background">
         <div className="px-4 pt-4 pb-2 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">{t('history.title')}</h1>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/add')}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-500 text-white active:opacity-70 transition-opacity"
+              aria-label={t('history.add_activity')}
+            >
+              <Plus size={20} />
+            </button>
             <button
               type="button"
               onClick={() => setShowSearch(s => !s)}
@@ -382,6 +402,7 @@ export default function HistoryPage() {
                   <div className="space-y-2">
                     {items.map(a => {
                       const amount = a.details?.amount as number | undefined;
+                      const durMins = getActivityDurationMins(a);
                       return (
                         <SwipeableCard
                           key={a.id}
@@ -403,6 +424,9 @@ export default function HistoryPage() {
                                 <p className="text-xs font-medium text-foreground">
                                   {amount.toLocaleString('tr-TR')} {currencySymbol}
                                 </p>
+                              )}
+                              {durMins != null && (
+                                <p className="text-xs text-muted-foreground">{formatDuration(durMins, t) ?? ''}</p>
                               )}
                               {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
                             </div>
@@ -511,6 +535,7 @@ export default function HistoryPage() {
           <div className="space-y-2">
             {dayActivities.map(a => {
               const amount = a.details?.amount as number | undefined;
+              const durMins = getActivityDurationMins(a);
               const at = new Date(activityDateTimeSource(a));
               const timeLabel = Number.isNaN(at.getTime())
                 ? a.time
@@ -532,6 +557,9 @@ export default function HistoryPage() {
                         <p className="text-xs font-medium text-foreground">
                           {amount.toLocaleString('tr-TR')} {currencySymbol}
                         </p>
+                      )}
+                      {durMins != null && (
+                        <p className="text-xs text-muted-foreground">{formatDuration(durMins, t) ?? ''}</p>
                       )}
                       {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
                     </div>
@@ -566,11 +594,15 @@ export default function HistoryPage() {
           activity={selectedActivity}
           onClose={() => setSelectedActivity(null)}
           onDelete={async id => {
-            await deleteActivityById(userId, id);
-            void loadDayActivities(selectedDate);
-            void loadDatesForMonth(viewYear, viewMonth);
-            if (searchQuery.length >= 2) void searchAllActivities(searchQuery);
-            setSelectedActivity(null);
+            try {
+              await deleteActivityById(id);
+              void loadDayActivities(selectedDate);
+              void loadDatesForMonth(viewYear, viewMonth);
+              if (searchQuery.length >= 2) void searchAllActivities(searchQuery);
+              setSelectedActivity(null);
+            } catch (e) {
+              console.error('deleteActivityById', e);
+            }
           }}
         />
       )}
