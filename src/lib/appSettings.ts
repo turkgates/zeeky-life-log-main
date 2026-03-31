@@ -8,6 +8,12 @@ export interface AppSettings {
   premium_monthly_price: number;
   premium_yearly_price: number;
   currency_key: string;
+  campaign_active: boolean;
+  campaign_end_date: string;
+  campaign_monthly_price: number;
+  campaign_yearly_price: number;
+  campaign_label: string;
+  campaign_desc: string;
 }
 
 const getCurrencyKey = (currency: string): string => {
@@ -28,9 +34,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   premium_monthly_price: 7.99,
   premium_yearly_price: 59.99,
   currency_key: 'eur',
+  campaign_active: false,
+  campaign_end_date: '',
+  campaign_monthly_price: 4.99,
+  campaign_yearly_price: 39.99,
+  campaign_label: '',
+  campaign_desc: '',
 };
 
-export const getAppSettings = async (currency: string): Promise<AppSettings> => {
+export const getAppSettings = async (
+  currency: string,
+  language: string,
+): Promise<AppSettings> => {
   const { data } = await supabase.from('app_settings').select('key, value');
 
   const map = Object.fromEntries(
@@ -38,6 +53,7 @@ export const getAppSettings = async (currency: string): Promise<AppSettings> => 
   ) as Record<string, string | undefined>;
 
   const currencyKey = getCurrencyKey(currency);
+  const langKey = language === 'en' ? 'en' : language === 'fr' ? 'fr' : 'tr';
 
   return {
     free_daily_messages: parseInt(map.free_daily_messages ?? String(DEFAULT_SETTINGS.free_daily_messages)),
@@ -53,5 +69,15 @@ export const getAppSettings = async (currency: string): Promise<AppSettings> => 
       map[`premium_yearly_price_${currencyKey}`] ?? map.premium_yearly_price ?? String(DEFAULT_SETTINGS.premium_yearly_price),
     ),
     currency_key: currencyKey,
+    campaign_active: map.campaign_active === 'true',
+    campaign_end_date: map.campaign_end_date ?? '',
+    campaign_monthly_price: parseFloat(
+      map[`campaign_monthly_price_${currencyKey}`] ?? String(DEFAULT_SETTINGS.campaign_monthly_price),
+    ),
+    campaign_yearly_price: parseFloat(
+      map[`campaign_yearly_price_${currencyKey}`] ?? String(DEFAULT_SETTINGS.campaign_yearly_price),
+    ),
+    campaign_label: map[`campaign_label_${langKey}`] ?? '',
+    campaign_desc: map[`campaign_desc_${langKey}`] ?? '',
   };
 };

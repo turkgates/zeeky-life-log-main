@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InboxIcon, Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2, Search, Plus, X } from 'lucide-react';
+import { Star, Loader2, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, StarOff, Trash2, Search, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getActivityCategory } from '@/lib/categoryTranslations';
 import { HighlightMatch } from '@/components/HighlightMatch';
@@ -527,9 +527,24 @@ export default function HistoryPage() {
             <p className="text-xs text-muted-foreground">{t('history.loading')}</p>
           </div>
         ) : dayActivities.length === 0 ? (
-          <div className="text-center py-12">
-            <InboxIcon className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">{t('history.no_activities')}</p>
+          <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-4">
+              <span className="text-3xl">💬</span>
+            </div>
+            <p className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              {t('history.no_activities_title')}
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+              {t('history.no_activities_desc')}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="mt-5 px-6 py-3 rounded-2xl bg-blue-500 text-white text-sm font-medium active:opacity-70 transition-opacity flex items-center gap-2"
+            >
+              <span>💬</span>
+              {t('history.go_to_chat')}
+            </button>
           </div>
         ) : (
           <div className="space-y-2">

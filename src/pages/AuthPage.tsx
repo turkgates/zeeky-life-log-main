@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useLanguageStore } from '@/store/useLanguageStore';
+import zeekyLogo from '@/assets/zeeky-logo.png';
 
 type Tab = 'login' | 'register';
 
@@ -150,6 +151,7 @@ export default function AuthPage() {
         ))}
       </div>
       <div className="text-center mb-8">
+        <img src={zeekyLogo} alt="Zeeky" className="w-16 h-16 object-contain mx-auto mb-2" />
         <h1 className="text-3xl font-bold text-blue-600 mb-2">Zeeky</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('auth.tagline')}</p>
       </div>

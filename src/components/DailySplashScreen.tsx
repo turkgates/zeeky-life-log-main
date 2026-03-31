@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
+import zeekyLogo from '@/assets/zeeky-logo.png';
 
 interface Props {
   onComplete: () => void;
@@ -153,7 +154,7 @@ export function DailySplashScreen({ onComplete }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-blue-600 to-indigo-700">
       <div className="w-24 h-24 rounded-3xl bg-white/20 flex items-center justify-center mb-8 shadow-lg">
-        <span className="text-5xl font-bold text-white">Z</span>
+        <img src={zeekyLogo} alt="Zeeky" className="w-20 h-20 object-contain" />
       </div>
 
       <h1 className="text-3xl font-bold text-white mb-2">Zeeky</h1>

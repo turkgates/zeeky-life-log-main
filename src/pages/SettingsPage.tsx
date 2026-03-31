@@ -11,6 +11,7 @@ import { useLanguageStore } from '@/store/useLanguageStore';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import CampaignCountdown from '@/components/CampaignCountdown';
 
 
 function Toggle({
@@ -54,29 +55,55 @@ function Toggle({
 }
 
 export default function SettingsPage() {
+  // —— Tüm hook'lar üstte (koşul / erken return yok) ——
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
-  const { theme, toggle } = useTheme();
-  const { t } = useTranslation();
   const { language, setLanguage } = useLanguageStore();
-  const [notifications, setNotifications] = useState({ daily_motivation: true, weekly_summary: true });
-
+  const currencyCode = useCurrencyStore(s => s.code);
   const setGlobalCurrency = useCurrencyStore(s => s.setCurrency);
+  const { settings } = useAppSettings();
+  const { t } = useTranslation();
+  const { theme, toggle } = useTheme();
+
+  const [notifications, setNotifications] = useState({ daily_motivation: true, weekly_summary: true });
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [aiPersonality, setAiPersonality] = useState<'balanced' | 'strict' | 'gentle'>('balanced');
-
-  const { settings } = useAppSettings();
   const [isPremiumPlan, setIsPremiumPlan] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+
+  const currencySymbolMap: Record<string, string> = { eur: '€', usd: '$', try: '₺' };
+  const currencySymbol = currencySymbolMap[settings.currency_key] ?? '€';
+  const monthlyPrice = settings.campaign_active ? settings.campaign_monthly_price : settings.premium_monthly_price;
+  const yearlyPrice = settings.campaign_active ? settings.campaign_yearly_price : settings.premium_yearly_price;
+
+  const personalityOptions = useMemo(() => [
+    {
+      value: 'balanced' as const,
+      emoji: '😊',
+      label: t('settings.personality_balanced'),
+      desc: t('settings.personality_balanced_desc'),
+    },
+    {
+      value: 'strict' as const,
+      emoji: '💪',
+      label: t('settings.personality_strict'),
+      desc: t('settings.personality_strict_desc'),
+    },
+    {
+      value: 'gentle' as const,
+      emoji: '🤗',
+      label: t('settings.personality_gentle'),
+      desc: t('settings.personality_gentle_desc'),
+    },
+  ], [t]);
 
   useEffect(() => {
     const load = async () => {
@@ -117,29 +144,6 @@ export default function SettingsPage() {
     };
     void load();
   }, [setGlobalCurrency, userId]);
-
-  const currencyCode = useCurrencyStore(s => s.code);
-
-  const personalityOptions = useMemo(() => [
-    {
-      value: 'balanced' as const,
-      emoji: '😊',
-      label: t('settings.personality_balanced'),
-      desc: t('settings.personality_balanced_desc'),
-    },
-    {
-      value: 'strict' as const,
-      emoji: '💪',
-      label: t('settings.personality_strict'),
-      desc: t('settings.personality_strict_desc'),
-    },
-    {
-      value: 'gentle' as const,
-      emoji: '🤗',
-      label: t('settings.personality_gentle'),
-      desc: t('settings.personality_gentle_desc'),
-    },
-  ], [t]);
 
   const handleCurrencyChange = async (code: string) => {
     if (!userId) return;
@@ -261,14 +265,25 @@ export default function SettingsPage() {
               <div className="min-w-0">
                 <p className="text-lg font-bold">Zeeky Premium</p>
                 <p className="text-sm text-white/85 mt-1">{t('settings.premium_desc')}</p>
+                {settings.campaign_active && settings.campaign_label && (
+                  <div className="mt-2 inline-block bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                    🎉 {settings.campaign_label}
+                  </div>
+                )}
                 <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
                   <div>
                     <span className="text-white/60 block text-xs">{t('settings.premium_monthly')}</span>
-                    <span className="font-semibold text-lg">{settings.premium_monthly_price}€</span>
+                    {settings.campaign_active && (
+                      <span className="text-white/40 text-xs line-through mr-1">{settings.premium_monthly_price}{currencySymbol}</span>
+                    )}
+                    <span className="font-semibold text-lg">{monthlyPrice}{currencySymbol}</span>
                   </div>
                   <div>
                     <span className="text-white/60 block text-xs">{t('settings.premium_yearly')}</span>
-                    <span className="font-semibold text-lg">{settings.premium_yearly_price}€</span>
+                    {settings.campaign_active && (
+                      <span className="text-white/40 text-xs line-through mr-1">{settings.premium_yearly_price}{currencySymbol}</span>
+                    )}
+                    <span className="font-semibold text-lg">{yearlyPrice}{currencySymbol}</span>
                   </div>
                 </div>
               </div>
@@ -582,11 +597,23 @@ export default function SettingsPage() {
               ))}
             </div>
 
+            {settings.campaign_active && settings.campaign_label && (
+              <div className="bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full text-center mb-3">
+                🎉 {settings.campaign_label}
+              </div>
+            )}
+            {settings.campaign_active && settings.campaign_desc && (
+              <p className="text-xs text-orange-500 text-center mb-3">{settings.campaign_desc}</p>
+            )}
+
             <div className="flex gap-3 mb-4">
               <div className="flex-1 border-2 border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-center">
                 <p className="text-xs text-gray-500 mb-1">{t('settings.monthly')}</p>
+                {settings.campaign_active && (
+                  <p className="text-sm text-gray-400 line-through">{settings.premium_monthly_price}{currencySymbol}</p>
+                )}
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {settings.premium_monthly_price}€
+                  {monthlyPrice}{currencySymbol}
                 </p>
                 <p className="text-xs text-gray-400">{t('settings.per_month')}</p>
               </div>
@@ -595,12 +622,19 @@ export default function SettingsPage() {
                   {t('settings.best_value')}
                 </div>
                 <p className="text-xs text-gray-500 mb-1">{t('settings.yearly')}</p>
+                {settings.campaign_active && (
+                  <p className="text-sm text-gray-400 line-through">{settings.premium_yearly_price}{currencySymbol}</p>
+                )}
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {settings.premium_yearly_price}€
+                  {yearlyPrice}{currencySymbol}
                 </p>
                 <p className="text-xs text-gray-400">{t('settings.per_year')}</p>
               </div>
             </div>
+
+            {settings.campaign_active && settings.campaign_end_date && (
+              <CampaignCountdown endDate={settings.campaign_end_date} />
+            )}
 
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-4 mb-4">
               <p className="text-sm text-blue-600 dark:text-blue-400 text-center">

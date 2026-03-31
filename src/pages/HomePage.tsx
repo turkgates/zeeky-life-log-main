@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import WeeklySummaryPage from '@/pages/WeeklySummaryPage';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import zeekyAvatar from '@/assets/zeeky-avatar.png';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const zeekyChatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zeeky-chat`;
@@ -559,9 +560,11 @@ export default function HomePage() {
                 className={`flex mb-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 mt-1">
-                    Z
-                  </div>
+                  <img
+                    src={zeekyAvatar}
+                    alt="Zeeky"
+                    className="w-8 h-8 rounded-full object-contain bg-gradient-to-br from-blue-500 to-purple-600 p-1 mr-2 flex-shrink-0 mt-1"
+                  />
                 )}
                 <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
                   msg.role === 'user'
@@ -575,9 +578,12 @@ export default function HomePage() {
 
             {showMessageLimitUpgrade && (
               <div className="flex justify-start mb-3">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 mt-1 opacity-0 pointer-events-none select-none" aria-hidden>
-                  Z
-                </div>
+                <img
+                  src={zeekyAvatar}
+                  alt=""
+                  aria-hidden
+                  className="w-8 h-8 rounded-full object-contain bg-gradient-to-br from-blue-500 to-purple-600 p-1 mr-2 flex-shrink-0 mt-1 opacity-0 pointer-events-none select-none"
+                />
                 <button
                   type="button"
                   onClick={() => navigate('/settings')}
@@ -590,9 +596,11 @@ export default function HomePage() {
 
             {isChatLoading && (
               <div className="flex justify-start mb-3">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0">
-                  Z
-                </div>
+                <img
+                  src={zeekyAvatar}
+                  alt="Zeeky"
+                  className="w-8 h-8 rounded-full object-contain bg-gradient-to-br from-blue-500 to-purple-600 p-1 mr-2 flex-shrink-0"
+                />
                 <div className="bg-gray-100 dark:bg-gray-700 px-4 py-3 rounded-2xl rounded-bl-none">
                   <div className="flex gap-1 items-center">
                     <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
