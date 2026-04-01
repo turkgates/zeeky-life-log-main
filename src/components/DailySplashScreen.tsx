@@ -152,7 +152,7 @@ export function DailySplashScreen({ onComplete }: Props) {
         : 'Sizin için en iyi deneyim hazırlanıyor';
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-blue-600 to-indigo-700">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-blue-600 to-indigo-700 pt-safe pb-safe px-safe">
       <div className="w-24 h-24 rounded-3xl bg-white/20 flex items-center justify-center mb-8 shadow-lg">
         <img src={zeekyLogo} alt="Zeeky" className="w-20 h-20 object-contain" />
       </div>

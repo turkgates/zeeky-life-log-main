@@ -429,7 +429,7 @@ export default function AddActionPage() {
     <div className="min-h-screen bg-background w-full flex flex-col">
 
       {/* ── Colored Header ─────────────────────────────────────────────────── */}
-      <div className="px-4 pt-10 pb-5" style={{ backgroundColor: catColor }}>
+      <div className="px-4 pt-4 pb-5" style={{ backgroundColor: catColor }}>
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => isEditing ? navigate(-1) : setStep('category')}

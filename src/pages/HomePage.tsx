@@ -39,6 +39,8 @@ const BOTTOM_NAV_HEIGHT = 64;
 const TOP_BAR_HEIGHT = 60;
 const INPUT_ROW_HEIGHT = 60;
 
+const SAFE_BOTTOM = 'env(safe-area-inset-bottom, 0px)';
+
 function buildWelcomeMessage(translate: TFunction, userFirstName: string): string {
   const hour = new Date().getHours();
   const timeKey = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
@@ -487,10 +489,10 @@ export default function HomePage() {
           top: 0,
           left: 0,
           right: 0,
-          height: TOP_BAR_HEIGHT,
+          minHeight: `calc(${TOP_BAR_HEIGHT}px + env(safe-area-inset-top, 0px))`,
           zIndex: 40,
         }}
-        className="flex items-center justify-between px-4 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700"
+        className="flex items-center justify-between px-4 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 box-border pt-safe"
       >
         <div>
           <h1 className="font-semibold text-gray-800 dark:text-gray-100">
@@ -535,10 +537,10 @@ export default function HomePage() {
         onScroll={handleScroll}
         style={{
           position: 'fixed',
-          top: TOP_BAR_HEIGHT,
+          top: `calc(${TOP_BAR_HEIGHT}px + env(safe-area-inset-top, 0px))`,
           left: 0,
           right: 0,
-          bottom: BOTTOM_NAV_HEIGHT + INPUT_ROW_HEIGHT,
+          bottom: `calc(${BOTTOM_NAV_HEIGHT + INPUT_ROW_HEIGHT}px + ${SAFE_BOTTOM})`,
           overflowY: 'auto',
           overscrollBehavior: 'contain',
         }}
@@ -620,7 +622,7 @@ export default function HomePage() {
       <div
         style={{
           position: 'fixed',
-          bottom: BOTTOM_NAV_HEIGHT,
+          bottom: `calc(${BOTTOM_NAV_HEIGHT}px + ${SAFE_BOTTOM})`,
           left: 0,
           right: 0,
           zIndex: 40,

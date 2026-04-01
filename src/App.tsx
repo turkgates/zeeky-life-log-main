@@ -76,7 +76,7 @@ function AppRoutes() {
     <>
       <CurrencyLoader />
       <OnboardingGuard />
-      <div className="min-h-screen flex flex-col bg-background w-full">
+      <div className="min-h-screen flex flex-col bg-background w-full pt-safe">
         <div className="flex-1 flex flex-col w-full">
           <Routes>
             <Route path="/auth" element={<AuthPage />} />

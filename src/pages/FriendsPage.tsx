@@ -211,7 +211,7 @@ export default function FriendsPage() {
   return (
     <div className="min-h-screen bg-background w-full pb-28 relative">
       {/* Blue header */}
-      <div className="bg-blue-600 text-white px-4 pt-12 pb-4 rounded-b-3xl shadow-sm">
+      <div className="bg-blue-600 text-white px-4 pt-4 pb-4 rounded-b-3xl shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <button
             type="button"

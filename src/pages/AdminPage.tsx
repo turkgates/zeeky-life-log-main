@@ -221,7 +221,7 @@ export function AdminPage() {
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white w-full">
       {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800 px-4 pt-12 pb-0 shrink-0">
+      <div className="bg-gray-900 border-b border-gray-800 px-4 pt-4 pb-0 shrink-0">
         <div className="flex items-center gap-3 mb-4">
           <button
             type="button"
