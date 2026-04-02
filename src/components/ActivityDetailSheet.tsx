@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Pencil, Trash2, Clock, Users, Wallet, Star, Film,
   MapPin, StickyNote, FolderOpen, Package,
+  Heart, Footprints, Flame, BedDouble, Activity as ActivityIcon,
 } from 'lucide-react';
 import { Activity, CATEGORY_CONFIG } from '@/types/zeeky';
 import CategoryIcon from '@/components/CategoryIcon';
@@ -37,6 +38,18 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
 
   const config  = CATEGORY_CONFIG[activity.category] ?? { label: activity.category, color: '#78909C' };
   const details = activity.details || {};
+
+  const isHealthKit = (activity as any).created_via === 'healthkit';
+  let healthData: {
+    steps?: number;
+    distance_km?: number;
+    calories?: number;
+    sleep?: number;
+    heartRate?: number;
+  } = {};
+  if (isHealthKit && (activity as any).raw_message) {
+    try { healthData = JSON.parse((activity as any).raw_message); } catch {}
+  }
 
   // ── Build detail rows ────────────────────────────────────────────────────
   const companions   = details.companions as string[] | undefined;
@@ -191,6 +204,83 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
             </a>
           ) : null}
 
+          {/* HealthKit metrics grid */}
+          {isHealthKit && (
+            <div className="mb-6">
+              <div className="grid grid-cols-2 gap-3">
+                {healthData.steps != null && (
+                  <div className="rounded-2xl p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                    <div className="flex items-center gap-2 mb-2 opacity-80">
+                      <Footprints className="w-4 h-4" />
+                      <span className="text-xs font-medium">
+                        {i18n.language === 'fr' ? 'Pas' : i18n.language === 'en' ? 'Steps' : 'Adım'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold">{healthData.steps.toLocaleString(locale)}</p>
+                  </div>
+                )}
+                {healthData.distance_km != null && (
+                  <div className="rounded-2xl p-4 bg-gradient-to-br from-violet-500 to-purple-600 text-white">
+                    <div className="flex items-center gap-2 mb-2 opacity-80">
+                      <ActivityIcon className="w-4 h-4" />
+                      <span className="text-xs font-medium">
+                        {i18n.language === 'fr' ? 'Distance' : i18n.language === 'en' ? 'Distance' : 'Mesafe'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold">
+                      {healthData.distance_km.toLocaleString(locale)}
+                      <span className="text-sm font-normal ml-1">km</span>
+                    </p>
+                  </div>
+                )}
+                {healthData.sleep != null && (
+                  <div className="rounded-2xl p-4 bg-gradient-to-br from-indigo-500 to-blue-700 text-white">
+                    <div className="flex items-center gap-2 mb-2 opacity-80">
+                      <BedDouble className="w-4 h-4" />
+                      <span className="text-xs font-medium">
+                        {i18n.language === 'fr' ? 'Sommeil' : i18n.language === 'en' ? 'Sleep' : 'Uyku'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold">
+                      {healthData.sleep}
+                      <span className="text-sm font-normal ml-1">
+                        {i18n.language === 'en' ? 'h' : i18n.language === 'fr' ? 'h' : 'sa'}
+                      </span>
+                    </p>
+                  </div>
+                )}
+                {healthData.heartRate != null && (
+                  <div className="rounded-2xl p-4 bg-gradient-to-br from-purple-500 to-violet-700 text-white">
+                    <div className="flex items-center gap-2 mb-2 opacity-80">
+                      <Heart className="w-4 h-4" />
+                      <span className="text-xs font-medium">
+                        {i18n.language === 'fr' ? 'Fréq. cardiaque' : i18n.language === 'en' ? 'Heart Rate' : 'Kalp Atışı'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold">
+                      {healthData.heartRate}
+                      <span className="text-sm font-normal ml-1">bpm</span>
+                    </p>
+                  </div>
+                )}
+                {healthData.calories != null && (
+                  <div className="rounded-2xl p-4 bg-gradient-to-br from-blue-400 to-indigo-500 text-white col-span-2">
+                    <div className="flex items-center gap-2 mb-2 opacity-80">
+                      <Flame className="w-4 h-4" />
+                      <span className="text-xs font-medium">
+                        {i18n.language === 'fr' ? 'Calories actives' : i18n.language === 'en' ? 'Active Calories' : 'Aktif Kalori'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold">
+                      {healthData.calories.toLocaleString(locale)}
+                      <span className="text-sm font-normal ml-1">kcal</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Detail rows */}
           {rows.length > 0 && (
             <div className="mb-5">
@@ -205,7 +295,7 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
           )}
 
           {/* Note */}
-          {activity.note && (
+          {activity.note && (activity as any).created_via !== 'healthkit' && (
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <StickyNote className="w-3.5 h-3.5 text-muted-foreground" />

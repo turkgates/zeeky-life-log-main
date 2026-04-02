@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import zeekyLogo from '@/assets/zeeky-logo.png';
+import { syncHealthKitActivities } from '@/hooks/useHealthKit';
 
 interface Props {
   onComplete: () => void;
@@ -117,6 +118,7 @@ export function DailySplashScreen({ onComplete }: Props) {
               language,
             }),
           }),
+          syncHealthKitActivities(user.id, language),
           new Promise<void>(resolve => {
             window.setTimeout(resolve, 4000);
           }),

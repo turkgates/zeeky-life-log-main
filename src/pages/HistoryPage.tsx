@@ -428,7 +428,9 @@ export default function HistoryPage() {
                               {durMins != null && (
                                 <p className="text-xs text-muted-foreground">{formatDuration(durMins, t) ?? ''}</p>
                               )}
-                              {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
+                              {a.note && (a as any).created_via !== 'healthkit' && (
+                                <p className="text-xs text-muted-foreground truncate">{a.note}</p>
+                              )}
                             </div>
                             <span className="text-xs text-muted-foreground tabular-nums">{a.time}</span>
                           </div>
@@ -576,7 +578,9 @@ export default function HistoryPage() {
                       {durMins != null && (
                         <p className="text-xs text-muted-foreground">{formatDuration(durMins, t) ?? ''}</p>
                       )}
-                      {a.note && <p className="text-xs text-muted-foreground truncate">{a.note}</p>}
+                      {a.note && (a as any).created_via !== 'healthkit' && (
+                        <p className="text-xs text-muted-foreground truncate">{a.note}</p>
+                      )}
                     </div>
                     <span className="text-xs text-muted-foreground tabular-nums">{timeLabel}</span>
                   </div>
