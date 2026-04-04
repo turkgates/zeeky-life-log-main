@@ -1,11 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Search, Users, BarChart3, Settings2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Search, Users, BarChart2, Settings, MessageSquare, ScrollText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getLocalISOString } from '@/lib/dateUtils';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-type Tab = 'overview' | 'users' | 'settings';
+type Tab = 'overview' | 'users' | 'settings' | 'feedback' | 'legal';
+
+interface LegalDoc {
+  id: string;
+  doc_type: 'privacy_policy' | 'terms_of_service';
+  language: string;
+  version: string;
+  title: string;
+  content: string;
+}
+
+interface FeedbackRow {
+  id: string;
+  user_id: string;
+  message: string;
+  status: 'unread' | 'read' | 'resolved';
+  created_at: string;
+  user_email?: string | null;
+}
 
 interface AdminStats {
   total_users: number;
@@ -170,6 +189,70 @@ export function AdminPage() {
     toast.success('Admin yapıldı');
   };
 
+  // ── Feedback ──────────────────────────────────────────────────────────────
+  const [feedbackRows, setFeedbackRows] = useState<FeedbackRow[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const unreadCount = feedbackRows.filter(f => f.status === 'unread').length;
+
+  useEffect(() => {
+    if (tab !== 'feedback') return;
+    setFeedbackLoading(true);
+    supabase
+      .from('feedback')
+      .select('*, users(email)')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setFeedbackRows(
+          ((data as Array<Record<string, unknown>>) || []).map(r => ({
+            id: r.id as string,
+            user_id: r.user_id as string,
+            message: r.message as string,
+            status: (r.status as FeedbackRow['status']) || 'unread',
+            created_at: r.created_at as string,
+            user_email: (r.users as { email?: string } | null)?.email ?? null,
+          })),
+        );
+      })
+      .finally(() => setFeedbackLoading(false));
+  }, [tab]);
+
+  const cycleFeedbackStatus = async (id: string, current: FeedbackRow['status']) => {
+    const next: FeedbackRow['status'] =
+      current === 'unread' ? 'read' : current === 'read' ? 'resolved' : 'unread';
+    const { error } = await supabase.from('feedback').update({ status: next }).eq('id', id);
+    if (error) { toast.error('Güncellenemedi'); return; }
+    setFeedbackRows(prev => prev.map(f => f.id === id ? { ...f, status: next } : f));
+  };
+
+  // ── Legal Documents ────────────────────────────────────────────────────────
+  const [legalLang, setLegalLang] = useState<'tr' | 'en' | 'fr'>('tr');
+  const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
+  const [legalLoading, setLegalLoading] = useState(false);
+  const [legalSavedId, setLegalSavedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab !== 'legal') return;
+    setLegalLoading(true);
+    supabase
+      .from('legal_documents')
+      .select('*')
+      .eq('language', legalLang)
+      .order('type', { ascending: true })
+      .then(({ data }) => setLegalDocs((data as LegalDoc[]) || []))
+      .finally(() => setLegalLoading(false));
+  }, [tab, legalLang]);
+
+  const saveLegalDoc = async (doc: LegalDoc, newTitle: string, newVersion: string, newContent: string) => {
+    const { error } = await supabase
+      .from('legal_documents')
+      .update({ title: newTitle, version: newVersion, content: newContent, updated_at: getLocalISOString() })
+      .eq('id', doc.id);
+    if (error) { toast.error('Kaydedilemedi'); return; }
+    setLegalDocs(prev => prev.map(d => d.id === doc.id ? { ...d, title: newTitle, version: newVersion, content: newContent } : d));
+    setLegalSavedId(doc.id);
+    window.setTimeout(() => setLegalSavedId(null), 2000);
+  };
+
   // ── Settings ──────────────────────────────────────────────────────────────
   const [appSettings, setAppSettings] = useState<AppSetting[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
@@ -193,7 +276,7 @@ export function AdminPage() {
   const updateSetting = async (key: string, value: string) => {
     const { error } = await supabase
       .from('app_settings')
-      .update({ value, updated_at: new Date().toISOString() })
+      .update({ value, updated_at: getLocalISOString() })
       .eq('key', key);
     if (error) { toast.error('Ayar kaydedilemedi'); return; }
     setAppSettings(prev => prev.map(s => s.key === key ? { ...s, value } : s));
@@ -210,10 +293,12 @@ export function AdminPage() {
     });
   };
 
-  const TABS: { id: Tab; label: string; Icon: typeof BarChart3 }[] = [
-    { id: 'overview', label: 'Genel Bakış', Icon: BarChart3 },
-    { id: 'users', label: 'Kullanıcılar', Icon: Users },
-    { id: 'settings', label: 'Ayarlar', Icon: Settings2 },
+  const TABS: { id: Tab; label: string; Icon: typeof BarChart2 }[] = [
+    { id: 'overview',  label: 'Genel Bakış',     Icon: BarChart2     },
+    { id: 'users',     label: 'Kullanıcılar',     Icon: Users         },
+    { id: 'settings',  label: 'Ayarlar',          Icon: Settings      },
+    { id: 'feedback',  label: 'Geri Bildirimler', Icon: MessageSquare },
+    { id: 'legal',     label: 'Sözleşmeler',      Icon: ScrollText    },
   ];
 
   const activeCurrency = CURRENCIES.find(c => c.key === selectedCurrency) ?? CURRENCIES[0];
@@ -241,14 +326,19 @@ export function AdminPage() {
             <button
               key={id}
               type="button"
+              title={label}
               onClick={() => setTab(id)}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+                'relative flex items-center justify-center w-12 h-10 rounded-t-xl border-b-2 transition-colors',
                 tab === id ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-300',
               )}
             >
-              <Icon className="w-4 h-4" />
-              {label}
+              <Icon className="w-5 h-5" />
+              {id === 'feedback' && unreadCount > 0 && (
+                <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -613,6 +703,177 @@ export function AdminPage() {
           )}
         </div>
       )}
+
+      {/* ── FEEDBACK ──────────────────────────────────────────────────────── */}
+      {tab === 'feedback' && (
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24">
+          {feedbackLoading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
+            </div>
+          ) : feedbackRows.length === 0 ? (
+            <p className="text-center text-gray-500 py-16">Henüz geri bildirim yok</p>
+          ) : (
+            <div className="space-y-3">
+              {feedbackRows.map(f => {
+                const statusColors: Record<FeedbackRow['status'], string> = {
+                  unread:   'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+                  read:     'bg-gray-700 text-gray-400',
+                  resolved: 'bg-green-500/20 text-green-400 border border-green-500/30',
+                };
+                const statusLabels: Record<FeedbackRow['status'], string> = {
+                  unread:   '● Okunmadı',
+                  read:     '✓ Okundu',
+                  resolved: '✔ Çözüldü',
+                };
+                return (
+                  <div key={f.id} className="bg-gray-800 rounded-2xl p-4">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <p className="text-xs text-gray-400 truncate">{f.user_email ?? f.user_id}</p>
+                      <p className="text-xs text-gray-500 shrink-0">
+                        {new Date(f.created_at).toLocaleDateString('tr-TR', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-200 leading-relaxed mb-3">{f.message}</p>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => void cycleFeedbackStatus(f.id, f.status)}
+                        className={cn(
+                          'text-xs font-semibold px-3 py-1.5 rounded-full transition-colors active:scale-[0.97]',
+                          statusColors[f.status],
+                        )}
+                      >
+                        {statusLabels[f.status]}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── LEGAL DOCUMENTS ───────────────────────────────────────────────── */}
+      {tab === 'legal' && (
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24">
+          {/* Dil seçici */}
+          <div className="flex gap-2 mb-4">
+            {(['tr', 'en', 'fr'] as const).map(l => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setLegalLang(l)}
+                className={cn(
+                  'flex-1 py-2 rounded-xl text-xs font-bold border transition-colors',
+                  legalLang === l
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-gray-800 text-gray-400 border-gray-700',
+                )}
+              >
+                {l === 'tr' ? '🇹🇷 TR' : l === 'en' ? '🇬🇧 EN' : '🇫🇷 FR'}
+              </button>
+            ))}
+          </div>
+
+          {legalLoading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
+            </div>
+          ) : legalDocs.length === 0 ? (
+            <p className="text-center text-gray-500 py-12">Bu dil için belge bulunamadı</p>
+          ) : (
+            <div className="space-y-6">
+              {legalDocs.map(doc => (
+                <LegalDocCard
+                  key={doc.id}
+                  doc={doc}
+                  savedId={legalSavedId}
+                  onSave={saveLegalDoc}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+function LegalDocCard({
+  doc,
+  savedId,
+  onSave,
+}: {
+  doc: LegalDoc;
+  savedId: string | null;
+  onSave: (doc: LegalDoc, title: string, version: string, content: string) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(doc.title);
+  const [version, setVersion] = useState(doc.version);
+  const [content, setContent] = useState(doc.content);
+  const [saving, setSaving] = useState(false);
+
+  const docLabel = doc.doc_type === 'privacy_policy' ? '🔒 Gizlilik Politikası' : '📄 Kullanıcı Sözleşmesi';
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(doc, title, version, content);
+    setSaving(false);
+  };
+
+  return (
+    <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
+      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{docLabel}</p>
+
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <p className="text-xs text-gray-500 mb-1">Başlık</p>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+          />
+        </div>
+        <div className="w-24">
+          <p className="text-xs text-gray-500 mb-1">Versiyon</p>
+          <input
+            value={version}
+            onChange={e => setVersion(e.target.value)}
+            className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-blue-500 text-center"
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-1">İçerik</p>
+        <textarea
+          value={content}
+          onChange={e => setContent(e.target.value)}
+          rows={10}
+          className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 resize-none"
+        />
+      </div>
+
+      <div className="flex items-center justify-end gap-3">
+        {savedId === doc.id && (
+          <span className="text-xs text-green-400 font-semibold">✓ Kaydedildi</span>
+        )}
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving}
+          className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold disabled:opacity-50 active:scale-[0.97] transition-transform flex items-center gap-2"
+        >
+          {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          Kaydet
+        </button>
+      </div>
     </div>
   );
 }

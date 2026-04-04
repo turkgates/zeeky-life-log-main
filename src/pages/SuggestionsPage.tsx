@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useTranslation } from 'react-i18next';
 import { getSuggestionCategory } from '@/lib/categoryTranslations';
+import { getLocalDayUTCRangeISO, getLocalISOString } from '@/lib/dateUtils';
 
 type CategoryKey = 'all' | 'sağlık' | 'sosyal' | 'finans' | 'alışkanlık';
 type StatusFilter = 'all' | 'pending' | 'accepted' | 'skipped';
@@ -137,13 +138,13 @@ export default function SuggestionsPage() {
 
   const refreshSuggestions = useCallback(async () => {
     if (!userId) return;
-    const today = new Date().toISOString().split('T')[0];
+    const { start: todayStart } = getLocalDayUTCRangeISO(new Date());
     await supabase
       .from('suggestions')
       .delete()
       .eq('user_id', userId)
       .eq('status', 'pending')
-      .gte('generated_at', `${today}T00:00:00.000Z`);
+      .gte('generated_at', todayStart);
     setSuggestions([]);
     await generateSuggestions('refresh');
     const list = await fetchSuggestions(userId, filterStatus, filterCategory);
@@ -154,7 +155,7 @@ export default function SuggestionsPage() {
     if (!userId) return;
     await supabase
       .from('suggestions')
-      .update({ status: 'accepted', responded_at: new Date().toISOString() })
+      .update({ status: 'accepted', responded_at: getLocalISOString() })
       .eq('id', id)
       .eq('user_id', userId);
     setSuggestions(prev => prev.filter(s => s.id !== id));
@@ -164,7 +165,7 @@ export default function SuggestionsPage() {
     if (!userId) return;
     await supabase
       .from('suggestions')
-      .update({ status: 'skipped', responded_at: new Date().toISOString() })
+      .update({ status: 'skipped', responded_at: getLocalISOString() })
       .eq('id', id)
       .eq('user_id', userId);
     setSuggestions(prev => prev.filter(s => s.id !== id));
@@ -178,14 +179,14 @@ export default function SuggestionsPage() {
     }
     setIsLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const { start: todayStart, end: todayEnd } = getLocalDayUTCRangeISO(new Date());
       const { data: todaySuggestions } = await supabase
         .from('suggestions')
         .select('id')
         .eq('user_id', userId)
         .eq('status', 'pending')
-        .gte('generated_at', `${today}T00:00:00.000Z`)
-        .lte('generated_at', `${today}T23:59:59.999Z`)
+        .gte('generated_at', todayStart)
+        .lte('generated_at', todayEnd)
         .limit(1);
 
       if (!todaySuggestions || todaySuggestions.length === 0) {

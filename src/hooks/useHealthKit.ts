@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
+import { getLocalDateString, getLocalISOString } from '@/lib/dateUtils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Health = (window as any).Capacitor?.Plugins?.CapacitorHealthExtended;
@@ -118,8 +119,10 @@ async function getSyncedDates(userId: string): Promise<Set<string>> {
 
   const synced = new Set<string>();
   data?.forEach(row => {
-    const dateStr = (row.activity_date as string)?.split('T')[0];
-    if (dateStr) synced.add(dateStr);
+    const raw = row.activity_date as string | undefined;
+    if (!raw) return;
+    const dateStr = getLocalDateString(new Date(raw));
+    synced.add(dateStr);
   });
   return synced;
 }
@@ -147,7 +150,7 @@ export async function syncHealthKitActivities(
   for (let i = 1; i <= 7; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(d);
     if (!syncedDates.has(dateStr)) datesToSync.push(dateStr);
   }
 
@@ -173,7 +176,7 @@ export async function syncHealthKitActivities(
       quantity_unit: dayData.steps ? 'adım' : null,
       location:      null,
       people:        null,
-      activity_date: `${dateStr}T08:00:00`,
+      activity_date: getLocalISOString(new Date(`${dateStr}T08:00:00`)),
       created_via:   'healthkit',
       raw_message:   JSON.stringify({
         steps:       dayData.steps,

@@ -39,6 +39,7 @@ import {
   activityDateTimeSource,
 } from '@/lib/dateLocale';
 import { formatDuration, getActivityDurationMins } from '@/lib/durationFormat';
+import { getLocalISOString } from '@/lib/dateUtils';
 
 function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -169,29 +170,48 @@ export default function HistoryPage() {
     setSearchResults([]);
   };
 
-  // Derive visible month from the first day of the displayed week
-  const viewYear  = weekDays[0].getFullYear();
-  const viewMonth = weekDays[0].getMonth();
-
-  // Load dates that have activities for the visible month (for dots)
-  const loadDatesForMonth = useCallback(async (year: number, month: number) => {
-    if (!userId) return;
-    const startOfMonth = new Date(year, month, 1).toISOString();
-    const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+  // Load dates that have activities for month(s) visible in the week strip (for dots)
+  const loadDatesForMonth = useCallback(async (year: number, month: number): Promise<Set<string>> => {
+    if (!userId) return new Set();
+    const startOfMonth = new Date(Date.UTC(year, month, 1)).toISOString();
+    const endOfMonth = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999)).toISOString();
     const { data } = await supabase
       .from('activities')
       .select('activity_date')
       .eq('user_id', userId)
       .gte('activity_date', startOfMonth)
       .lte('activity_date', endOfMonth);
-    if (data) {
-      setDatesWithData(new Set(data.map(r => toYMD(new Date(r.activity_date as string)))));
-    }
+    console.log('loadDatesForMonth data:', data, 'startOfMonth:', startOfMonth, 'endOfMonth:', endOfMonth);
+    if (!data) return new Set();
+    console.log('dates parsed:', data?.map(r => (r.activity_date as string).split('T')[0]));
+    return new Set(data.map(r => {
+      const d = r.activity_date as string;
+      return d.split('T')[0].split(' ')[0];
+    }));
   }, [userId]);
 
+  const loadDatesForWeekStrip = useCallback(async () => {
+    if (!userId) return;
+    const days = getWeekDays(currentWeekBase);
+    const first = days[0];
+    const last = days[6];
+    const y0 = first.getFullYear(), m0 = first.getMonth();
+    const y1 = last.getFullYear(), m1 = last.getMonth();
+    if (y0 === y1 && m0 === m1) {
+      const set = await loadDatesForMonth(y0, m0);
+      setDatesWithData(set);
+    } else {
+      const [setA, setB] = await Promise.all([
+        loadDatesForMonth(y0, m0),
+        loadDatesForMonth(y1, m1),
+      ]);
+      setDatesWithData(new Set([...setA, ...setB]));
+    }
+  }, [userId, currentWeekBase, loadDatesForMonth]);
+
   useEffect(() => {
-    void loadDatesForMonth(viewYear, viewMonth);
-  }, [viewYear, viewMonth, loadDatesForMonth, refreshKey]);
+    void loadDatesForWeekStrip();
+  }, [loadDatesForWeekStrip, refreshKey]);
 
   // Load activities for selected day
   const loadDayActivities = useCallback(async (date: string) => {
@@ -223,7 +243,7 @@ export default function HistoryPage() {
     try {
       await deleteActivityById(id);
       void loadDayActivities(selectedDate);
-      void loadDatesForMonth(viewYear, viewMonth);
+      void loadDatesForWeekStrip();
       if (searchQuery.length >= 2) void searchAllActivities(searchQuery);
     } catch (e) {
       console.error('deleteActivityById', e);
@@ -234,7 +254,7 @@ export default function HistoryPage() {
 
   const handleQuickLog = async (fav: FavoriteActivity) => {
     if (!userId) return;
-    const now = new Date().toISOString();
+    const activityDate = getLocalISOString();
 
     const { data, error } = await supabase
       .from('activities')
@@ -246,7 +266,7 @@ export default function HistoryPage() {
         duration_mins: fav.duration_mins ?? null,
         location:     fav.location ?? null,
         people:       fav.people ?? [],
-        activity_date: now,
+        activity_date: activityDate,
         created_via:  'manual',
         raw_message:  fav.raw_message ?? fav.title,
         is_favorite:  false,
@@ -258,7 +278,7 @@ export default function HistoryPage() {
       toast.success(`"${fav.title}" bugüne eklendi!`);
       const today = toYMD(new Date());
       if (selectedDate === today) void loadDayActivities(today);
-      void loadDatesForMonth(viewYear, viewMonth);
+      void loadDatesForWeekStrip();
     } else {
       toast.error('Eklenirken hata oluştu');
       console.error('Quick log error:', error);
@@ -297,7 +317,7 @@ export default function HistoryPage() {
       toast.success('Eylem silindi');
       await loadFavorites();
       void loadDayActivities(selectedDate);
-      void loadDatesForMonth(viewYear, viewMonth);
+      void loadDatesForWeekStrip();
     } else {
       toast.error('Silinemedi');
     }
@@ -616,7 +636,7 @@ export default function HistoryPage() {
             try {
               await deleteActivityById(id);
               void loadDayActivities(selectedDate);
-              void loadDatesForMonth(viewYear, viewMonth);
+              void loadDatesForWeekStrip();
               if (searchQuery.length >= 2) void searchAllActivities(searchQuery);
               setSelectedActivity(null);
             } catch (e) {

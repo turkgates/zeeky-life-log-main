@@ -359,7 +359,14 @@ export default function HomePage() {
             'Authorization': `Bearer ${supabaseAnonKey}`,
             'apikey': supabaseAnonKey,
           },
-          body: JSON.stringify({ message: userMessage, user_id: userId, personality, language }),
+          body: JSON.stringify({
+            message: userMessage,
+            user_id: userId,
+            personality,
+            language,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            current_datetime: new Date().toISOString(),
+          }),
           signal: controller.signal,
         });
       } finally {
@@ -565,7 +572,7 @@ export default function HomePage() {
                   <img
                     src={zeekyAvatar}
                     alt="Zeeky"
-                    className="w-8 h-8 rounded-full object-contain bg-gradient-to-br from-blue-500 to-purple-600 p-1 mr-2 flex-shrink-0 mt-1"
+                    className="w-8 h-8 rounded-full object-contain mr-2 flex-shrink-0 mt-1"
                   />
                 )}
                 <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
@@ -584,7 +591,7 @@ export default function HomePage() {
                   src={zeekyAvatar}
                   alt=""
                   aria-hidden
-                  className="w-8 h-8 rounded-full object-contain bg-gradient-to-br from-blue-500 to-purple-600 p-1 mr-2 flex-shrink-0 mt-1 opacity-0 pointer-events-none select-none"
+                  className="w-8 h-8 rounded-full object-contain mr-2 flex-shrink-0 mt-1 opacity-0 pointer-events-none select-none"
                 />
                 <button
                   type="button"
@@ -601,7 +608,7 @@ export default function HomePage() {
                 <img
                   src={zeekyAvatar}
                   alt="Zeeky"
-                  className="w-8 h-8 rounded-full object-contain bg-gradient-to-br from-blue-500 to-purple-600 p-1 mr-2 flex-shrink-0"
+                  className="w-8 h-8 rounded-full object-contain mr-2 flex-shrink-0"
                 />
                 <div className="bg-gray-100 dark:bg-gray-700 px-4 py-3 rounded-2xl rounded-bl-none">
                   <div className="flex gap-1 items-center">

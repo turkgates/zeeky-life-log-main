@@ -9,6 +9,7 @@ import {
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { translateFinanceCategory, getSubcategory } from '@/lib/categoryTranslations';
+import { getLocalNoonISOStringFromYMD } from '@/lib/dateUtils';
 
 interface Props {
   userId: string;
@@ -86,7 +87,7 @@ export default function TransactionDetailSheet({
       type:             editType,
       amount:           parseFloat(editAmount),
       category:         editCategory,
-      transaction_date: new Date(`${editDate}T12:00:00`).toISOString(),
+      transaction_date: getLocalNoonISOStringFromYMD(editDate),
       description:      editNote.trim() || null,
       frequency:        editFreq,
     });

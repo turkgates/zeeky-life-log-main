@@ -37,6 +37,8 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
   const [currencySymbol, setCurrencySymbol] = useState('₺');
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
   const dragStartY = useRef(0);
   const dragging = useRef(false);
@@ -65,6 +67,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
       if (data.summary) {
         const summary: WeeklySummaryData = { ...data.summary, language };
         setSummary(summary);
+        setGeneratedAt(new Date().toISOString());
       }
     } finally {
       setIsGenerating(false);
@@ -73,9 +76,7 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
 
   const checkAndLoad = useCallback(async () => {
     if (!userId) return;
-    setIsGenerating(true);
     setIsLoading(true);
-    setSummary(null);
 
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -105,29 +106,35 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
     if (existing?.summary_data) {
       const savedLanguage = (existing.summary_data as WeeklySummaryData).language;
       if (!savedLanguage || savedLanguage !== language) {
-        try {
-          await generateSummary(true);
-        } finally {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
+        await generateSummary(true);
         return;
       }
       setSummary(existing.summary_data as WeeklySummaryData);
-      setIsGenerating(false);
+      setGeneratedAt(existing.generated_at as string | null);
       setIsLoading(false);
       return;
     }
 
-    try {
-      await generateSummary(true);
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
+    await generateSummary(true);
   }, [generateSummary, userId, language]);
 
   useEffect(() => {
     if (!isOpen || !userId) return;
     void getUserCurrency(userId).then(({ symbol }) => setCurrencySymbol(symbol));
+  }, [isOpen, userId]);
+
+  useEffect(() => {
+    if (!isOpen || !userId) return;
+    supabase
+      .from('users')
+      .select('plan_type')
+      .eq('id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        setIsPremium(data?.plan_type === 'premium');
+      });
   }, [isOpen, userId]);
 
   useEffect(() => {
@@ -168,6 +175,10 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
     summary &&
     summary.total_activities === 0 &&
     !showInitialSpinner;
+
+  const isRefreshedToday = generatedAt
+    ? new Date(generatedAt).toDateString() === new Date().toDateString()
+    : false;
 
   return (
     <>
@@ -226,14 +237,20 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
               <p className="text-gray-600 leading-relaxed whitespace-pre-line">
                 {t('weekly_summary.no_data')}
               </p>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={isGenerating}
-                className="mt-6 w-full max-w-xs rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
-              >
-                {isGenerating ? t('weekly_summary.refreshing') : t('weekly_summary.refresh')}
-              </button>
+              {isPremium && (
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={isGenerating || isRefreshedToday}
+                  className="mt-6 w-full max-w-xs rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
+                >
+                  {isGenerating
+                    ? t('weekly_summary.refreshing')
+                    : isRefreshedToday
+                      ? t('weekly_summary.already_refreshed_today')
+                      : t('weekly_summary.refresh')}
+                </button>
+              )}
             </div>
           ) : summary ? (
             <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
@@ -369,26 +386,38 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={isGenerating}
-                className="mt-6 w-full rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
-              >
-                {isGenerating ? t('weekly_summary.refreshing') : t('weekly_summary.refresh')}
-              </button>
+              {isPremium && (
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={isGenerating || isRefreshedToday}
+                  className="mt-6 w-full rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
+                >
+                  {isGenerating
+                    ? t('weekly_summary.refreshing')
+                    : isRefreshedToday
+                      ? t('weekly_summary.already_refreshed_today')
+                      : t('weekly_summary.refresh')}
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center px-6 py-10">
               <p className="mb-4 text-center text-sm text-gray-600">{t('weekly_summary.error')}</p>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={isGenerating}
-                className="w-full max-w-xs rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
-              >
-                {isGenerating ? t('weekly_summary.refreshing') : t('weekly_summary.refresh')}
-              </button>
+              {isPremium && (
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={isGenerating || isRefreshedToday}
+                  className="w-full max-w-xs rounded-2xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-60"
+                >
+                  {isGenerating
+                    ? t('weekly_summary.refreshing')
+                    : isRefreshedToday
+                      ? t('weekly_summary.already_refreshed_today')
+                      : t('weekly_summary.refresh')}
+                </button>
+              )}
             </div>
           )}
         </div>

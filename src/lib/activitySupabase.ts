@@ -1,4 +1,10 @@
 import { supabase } from '@/lib/supabase';
+import {
+  getLocalDateString,
+  getLocalISOString,
+  getLocalDayUTCRangeISO,
+  getLocalDayUTCRangeISOFromYMD,
+} from '@/lib/dateUtils';
 import type { Activity, ActionCategory } from '@/types/zeeky';
 
 const CATEGORIES: ActionCategory[] = [
@@ -28,7 +34,7 @@ export function mapRowToActivity(row: Record<string, unknown>): Activity {
     dateStr = row.activity_date.slice(0, 10);
   } else if (row.activity_date) {
     const d = new Date(String(row.activity_date));
-    if (!Number.isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
+    if (!Number.isNaN(d.getTime())) dateStr = getLocalDateString(d);
   }
 
   const created = typeof row.created_at === 'string' ? row.created_at : '';
@@ -36,7 +42,7 @@ export function mapRowToActivity(row: Record<string, unknown>): Activity {
 
   // If `activity_date` is missing (or invalid), fall back to `created_at` for the date string.
   if (!dateStr && created) {
-    dateStr = createdDate.toISOString().slice(0, 10);
+    dateStr = getLocalDateString(createdDate);
   }
 
   let timeStr = '';
@@ -105,15 +111,14 @@ export function mapRowToActivity(row: Record<string, unknown>): Activity {
 
 export async function fetchTodayActivities(userId: string): Promise<Activity[]> {
   if (!userId) return [];
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0]; // "2026-03-23"
+  const { start, end } = getLocalDayUTCRangeISO(new Date());
 
   const { data, error } = await supabase
     .from('activities')
     .select('*')
     .eq('user_id', userId)
-    .gte('activity_date', `${todayStr}T00:00:00.000Z`)
-    .lt('activity_date', `${todayStr}T23:59:59.999Z`)
+    .gte('activity_date', start)
+    .lte('activity_date', end)
     .order('activity_date', { ascending: false });
 
   console.log('Result:', data, error);
@@ -143,12 +148,13 @@ export async function fetchAllActivitiesOrdered(userId: string): Promise<Activit
 
 export async function fetchActivitiesByDate(userId: string, dateStr: string): Promise<Activity[]> {
   if (!userId) return [];
+  const { start, end } = getLocalDayUTCRangeISOFromYMD(dateStr);
   const { data, error } = await supabase
     .from('activities')
     .select('*')
     .eq('user_id', userId)
-    .gte('activity_date', `${dateStr}T00:00:00.000Z`)
-    .lt('activity_date', `${dateStr}T23:59:59.999Z`)
+    .gte('activity_date', start)
+    .lte('activity_date', end)
     .order('activity_date', { ascending: false });
 
   if (error) {
@@ -211,7 +217,7 @@ export async function quickLogFavorite(userId: string, fav: FavoriteActivity): P
     duration_mins: fav.duration_mins ?? null,
     location:     fav.location ?? null,
     people:       fav.people ?? [],
-    activity_date: new Date().toISOString(),
+    activity_date: getLocalISOString(),
     created_via:  'quick_log',
     raw_message:  fav.raw_message ?? fav.title,
     is_favorite:  true,

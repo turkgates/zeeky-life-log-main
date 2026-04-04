@@ -25,6 +25,7 @@ import {
   TransactionCategory,
   ChartBar,
   fetchTransactions,
+  fetchAllTimeBalance,
   fetchCategories,
   computeWeeklyChart,
   fetchMonthlyChart,
@@ -36,6 +37,7 @@ import {
 } from '@/lib/transactionSupabase';
 import { formatDate, getMonthName } from '@/lib/dateLocale';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { getLocalDateString, getLocalDayUTCRangeISO, getLocalNoonISOStringFromYMD } from '@/lib/dateUtils';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -149,7 +151,7 @@ export default function FinancePage() {
     if (!userId) return;
     setAiLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const { start: todayStart, end: todayEnd } = getLocalDayUTCRangeISO(new Date());
 
       if (mode === 'auto') {
         const { data: existing } = await supabase
@@ -157,8 +159,8 @@ export default function FinancePage() {
           .select('content, generated_at')
           .eq('user_id', userId)
           .eq('category', 'finans')
-          .gte('generated_at', `${today}T00:00:00.000Z`)
-          .lte('generated_at', `${today}T23:59:59.999Z`)
+          .gte('generated_at', todayStart)
+          .lte('generated_at', todayEnd)
           .order('generated_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -205,13 +207,13 @@ export default function FinancePage() {
   // Helper: invalidate today's cached suggestion then regenerate
   const invalidateAndRefreshAdvice = useCallback(async () => {
     if (!userId) return;
-    const today = new Date().toISOString().split('T')[0];
+    const { start: todayStart } = getLocalDayUTCRangeISO(new Date());
     await supabase
       .from('suggestions')
       .delete()
       .eq('user_id', userId)
       .eq('category', 'finans')
-      .gte('generated_at', `${today}T00:00:00.000Z`);
+      .gte('generated_at', todayStart);
     void fetchAiSuggestion('refresh');
   }, [fetchAiSuggestion, userId]);
 
@@ -229,13 +231,13 @@ export default function FinancePage() {
     if (prevLangRef.current === language) return;
     prevLangRef.current = language;
     void (async () => {
-      const today = new Date().toISOString().split('T')[0];
+      const { start: todayStart } = getLocalDayUTCRangeISO(new Date());
       await supabase
         .from('suggestions')
         .delete()
         .eq('user_id', userId)
         .eq('category', 'finans')
-        .gte('generated_at', `${today}T00:00:00.000Z`);
+        .gte('generated_at', todayStart);
       setAiSuggestion(null);
       await fetchAiSuggestion();
     })();
@@ -262,6 +264,19 @@ export default function FinancePage() {
   const totalIncome  = useMemo(() => transactions.filter(t => t.type === 'income' ).reduce((s, t) => s + t.amount, 0), [transactions]);
   const totalExpense = useMemo(() => transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [transactions]);
   const balance      = totalIncome - totalExpense;
+
+  // ── All-time balance ──────────────────────────────────────────────────────
+  const [allTimeBalance, setAllTimeBalance] = useState<{ totalIncome: number; totalExpense: number; netBalance: number } | null>(null);
+  const [allTimeLoading, setAllTimeLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    setAllTimeLoading(true);
+    fetchAllTimeBalance(userId).then(data => {
+      setAllTimeBalance(data);
+      setAllTimeLoading(false);
+    });
+  }, [userId]);
 
   const chartHasNoData = useMemo(
     () => chartData.length === 0 || chartData.every(d => !d.gelir && !d.gider),
@@ -492,6 +507,38 @@ export default function FinancePage() {
             {t('finance.expense_this_month')}: -{totalExpense.toLocaleString(locale)} {currencySymbol}
           </span>
         </div>
+      </div>
+
+      {/* ── All-time Overview Card ─────────────────────────────────────── */}
+      <div className="mx-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 mb-4">
+        <p className="text-xs font-medium text-muted-foreground mb-3">{t('finance.all_time_overview')}</p>
+        {allTimeLoading ? (
+          <div className="space-y-2">
+            <div className="h-8 w-40 bg-muted rounded-lg animate-pulse" />
+            <div className="flex gap-2 flex-wrap">
+              <div className="h-7 w-36 bg-muted rounded-full animate-pulse" />
+              <div className="h-7 w-36 bg-muted rounded-full animate-pulse" />
+            </div>
+          </div>
+        ) : allTimeBalance ? (
+          <>
+            <p className="text-xs font-medium text-muted-foreground mb-1">{t('finance.net_balance')}</p>
+            <p className={cn(
+              "text-2xl font-bold mb-3",
+              allTimeBalance.netBalance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
+            )}>
+              {allTimeBalance.netBalance >= 0 ? '+' : ''}{allTimeBalance.netBalance.toLocaleString(locale)} {currencySymbol}
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-success/10 text-green-600 dark:text-green-400">
+                {t('finance.all_time_income')}: +{allTimeBalance.totalIncome.toLocaleString(locale)} {currencySymbol}
+              </span>
+              <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-destructive/10 text-red-600 dark:text-red-400">
+                {t('finance.all_time_expense')}: -{allTimeBalance.totalExpense.toLocaleString(locale)} {currencySymbol}
+              </span>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {/* ── AI Suggestion ──────────────────────────────────────────────── */}
@@ -891,7 +938,7 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
   const [description, setDescription] = useState('');
   const [category,    setCategory]    = useState('');
   const [subcategory, setSubcategory] = useState('');
-  const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10));
+  const [date,        setDate]        = useState(getLocalDateString());
   const [frequency,   setFrequency]   = useState<Recurrence>('none');
   const [saving,      setSaving]      = useState(false);
   const [txCount,     setTxCount]     = useState(0);
@@ -951,7 +998,7 @@ function AddTransactionModal({ userId, currencySymbol, currencyCode, onClose, on
       currency: currencyCode,
       category,
       subcategory: subcategory || null,
-      transaction_date: new Date(`${date}T12:00:00`).toISOString(),
+      transaction_date: getLocalNoonISOStringFromYMD(date),
       frequency,
       description: description.trim() || undefined,
     });

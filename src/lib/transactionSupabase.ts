@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getLocalISOString } from './dateUtils';
 
 export const MONTH_SHORT = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 export const DAY_SHORT   = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
@@ -91,7 +92,38 @@ export async function fetchTransactions(userId: string, year?: number, month?: n
     .order('transaction_date', { ascending: false });
   if (error) { console.error('fetchTransactions:', error); return []; }
   console.log('Transactions count:', data?.length);
-  return (data || []).map(mapRow);
+  const now = new Date();
+  return (data || [])
+    .map(mapRow)
+    .filter(tx => {
+      // Hide future-dated recurring instances (old pre-inserted rows or synced future rows)
+      const txDate = new Date(tx.transaction_date);
+      if (txDate > now && (tx.parent_transaction_id != null || tx.frequency !== 'none')) {
+        return false;
+      }
+      return true;
+    });
+}
+
+export async function fetchAllTimeBalance(userId: string): Promise<{
+  totalIncome: number;
+  totalExpense: number;
+  netBalance: number;
+}> {
+  if (!userId) return { totalIncome: 0, totalExpense: 0, netBalance: 0 };
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('type, amount')
+    .eq('user_id', userId)
+    .lte('transaction_date', now);
+  if (error || !data) {
+    console.error('fetchAllTimeBalance:', error);
+    return { totalIncome: 0, totalExpense: 0, netBalance: 0 };
+  }
+  const totalIncome  = data.filter(r => r.type === 'income' ).reduce((s, r) => s + (r.amount as number), 0);
+  const totalExpense = data.filter(r => r.type === 'expense').reduce((s, r) => s + (r.amount as number), 0);
+  return { totalIncome, totalExpense, netBalance: totalIncome - totalExpense };
 }
 
 export async function fetchCategories(): Promise<TransactionCategory[]> {
@@ -186,27 +218,52 @@ export interface AddTransactionPayload {
 
 export async function addTransaction(userId: string, payload: AddTransactionPayload): Promise<boolean> {
   if (!userId) return false;
-  const base = { ...payload, user_id: userId, created_via: 'manual' };
-  const { data, error } = await supabase
-    .from('transactions')
-    .insert(base)
+
+  // One-off transaction: insert directly, no recurring record
+  if (payload.frequency === 'none') {
+    const { error } = await supabase
+      .from('transactions')
+      .insert({ ...payload, user_id: userId, created_via: 'manual' });
+    if (error) { console.error('addTransaction (none):', error); return false; }
+    return true;
+  }
+
+  // Recurring: store the rule, then insert only this month's occurrence
+  const txDate = new Date(payload.transaction_date);
+  const dueDay = txDate.getDate(); // 1–31
+
+  const { data: rec, error: rErr } = await supabase
+    .from('recurring_transactions')
+    .insert({
+      user_id:     userId,
+      title:       payload.title,
+      type:        payload.type,
+      amount:      payload.amount,
+      currency:    payload.currency,
+      category:    payload.category,
+      subcategory: payload.subcategory ?? null,
+      frequency:   payload.frequency,
+      due_day:     dueDay,
+      description: payload.description ?? null,
+      is_active:   true,
+    })
     .select('id')
     .single();
-  if (error || !data) { console.error('addTransaction:', error); return false; }
 
-  // Insert recurring instances
-  if (payload.frequency !== 'none') {
-    const parentId = (data as Record<string, unknown>).id as string;
-    const count = payload.frequency === 'daily' ? 30 : 12;
-    const instances = Array.from({ length: count }, (_, i) => {
-      const d = new Date(payload.transaction_date);
-      if (payload.frequency === 'daily')   d.setDate(d.getDate() + (i + 1));
-      if (payload.frequency === 'weekly')  d.setDate(d.getDate() + (i + 1) * 7);
-      if (payload.frequency === 'monthly') d.setMonth(d.getMonth() + (i + 1));
-      return { ...base, transaction_date: d.toISOString(), parent_transaction_id: parentId };
+  if (rErr || !rec) { console.error('addTransaction (recurring insert):', rErr); return false; }
+
+  const parentId = (rec as Record<string, unknown>).id as string;
+
+  const { error: txErr } = await supabase
+    .from('transactions')
+    .insert({
+      ...payload,
+      user_id:               userId,
+      created_via:           'recurring',
+      parent_transaction_id: parentId,
     });
-    await supabase.from('transactions').insert(instances);
-  }
+
+  if (txErr) { console.error('addTransaction (tx insert):', txErr); return false; }
   return true;
 }
 

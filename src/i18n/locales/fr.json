@@ -91,6 +91,10 @@
     "income_this_month": "Revenus ce mois",
     "expense_this_month": "Dépenses ce mois",
     "balance_this_month": "Solde net",
+    "all_time_overview": "Vue d'ensemble",
+    "all_time_income": "Revenus totaux",
+    "all_time_expense": "Dépenses totales",
+    "net_balance": "Épargne nette",
     "chart_income": "Revenus",
     "chart_expense": "Dépenses",
     "no_data_chart": "Pas encore de données",
@@ -522,6 +526,16 @@
     "notifications_desc": "Activer/désactiver toutes les notifications",
     "dark_mode": "Mode sombre",
     "about": "À propos",
+    "feedback_title": "Avis & Suggestions",
+    "feedback_placeholder": "Écrivez vos pensées...",
+    "feedback_send": "Envoyer",
+    "feedback_success": "Votre avis a été envoyé, merci!",
+    "feedback_char_count": "{{count}}/500",
+    "legal_documents": "Documents légaux",
+    "privacy_policy": "Politique de confidentialité",
+    "terms_of_service": "Conditions d'utilisation",
+    "save_document": "Enregistrer",
+    "document_saved": "Enregistré ✓",
     "change_password": "Changer le mot de passe",
     "sign_out": "Se déconnecter",
     "current_password": "Mot de passe actuel",
@@ -687,7 +701,12 @@
     "error_email_required": "E-mail requis",
     "success_register": "Inscription réussie! Vérifie ton email",
     "welcome_back": "Bon retour",
-    "create_account": "Créer un compte"
+    "create_account": "Créer un compte",
+    "accept_privacy_policy": "J'ai lu et j'accepte la Politique de confidentialité",
+    "accept_terms": "J'ai lu et j'accepte les Conditions d'utilisation",
+    "read_privacy_policy": "Politique de confidentialité",
+    "read_terms": "Conditions d'utilisation",
+    "agreements_required": "Veuillez accepter les deux documents pour continuer"
   },
   "onboarding": {
     "welcome_title": "Bonjour! 👋",
@@ -846,7 +865,8 @@
     "prev_same": "→ Pareil que la semaine dernière",
     "expense_increased": "↑ {{pct}}% augmenté",
     "expense_decreased": "↓ {{pct}}% diminué",
-    "expense_unchanged": "Inchangé"
+    "expense_unchanged": "Inchangé",
+    "already_refreshed_today": "Déjà actualisé aujourd'hui"
   },
   "friends": {
     "title": "Mes amis",

@@ -3,6 +3,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import zeekyLogo from '@/assets/zeeky-logo.png';
 import { syncHealthKitActivities } from '@/hooks/useHealthKit';
+import { syncRecurringTransactions } from '@/lib/recurringSync';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   onComplete: () => void;
@@ -34,6 +36,45 @@ const messages = {
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+async function syncWeeklySummaryIfNeeded(userId: string, language: string): Promise<void> {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() - daysToMonday);
+  thisMonday.setHours(0, 0, 0, 0);
+
+  const weekStart =
+    dayOfWeek === 0
+      ? new Date(thisMonday.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      : thisMonday.toISOString();
+
+  const { data: existing } = await supabase
+    .from('weekly_summaries')
+    .select('generated_at')
+    .eq('user_id', userId)
+    .gte('week_start', weekStart)
+    .order('week_start', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.generated_at) {
+    const today = new Date().toDateString();
+    const generatedDay = new Date(existing.generated_at as string).toDateString();
+    if (today === generatedDay) return;
+  }
+
+  await fetch(`${supabaseUrl}/functions/v1/zeeky-weekly-summary`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      apikey: supabaseAnonKey,
+    },
+    body: JSON.stringify({ user_id: userId, language }),
+  });
+}
 
 export function DailySplashScreen({ onComplete }: Props) {
   const { user } = useAuthStore();
@@ -119,10 +160,12 @@ export function DailySplashScreen({ onComplete }: Props) {
             }),
           }),
           syncHealthKitActivities(user.id, language),
+          syncRecurringTransactions(user.id),
           new Promise<void>(resolve => {
             window.setTimeout(resolve, 4000);
           }),
         ]);
+        await syncWeeklySummaryIfNeeded(user.id, language);
       } catch (err) {
         console.error('Daily update error:', err);
       } finally {

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { getLocalISOString } from '@/lib/dateUtils';
 
 export type FriendRelationship =
   | 'arkadaş'
@@ -106,10 +107,10 @@ export const findOrCreateFriend = async (userId: string, name: string) => {
       .from('friends')
       .update({
         interaction_count: nextCount,
-        last_interaction: new Date().toISOString(),
+        last_interaction: getLocalISOString(),
       })
       .eq('id', existing.id);
-    return { ...existing, interaction_count: nextCount, last_interaction: new Date().toISOString() };
+    return { ...existing, interaction_count: nextCount, last_interaction: getLocalISOString() };
   }
 
   const { data: newFriend } = await supabase
@@ -120,7 +121,7 @@ export const findOrCreateFriend = async (userId: string, name: string) => {
       relationship: 'arkadaş',
       source: 'chat',
       interaction_count: 1,
-      last_interaction: new Date().toISOString(),
+      last_interaction: getLocalISOString(),
     })
     .select()
     .single();

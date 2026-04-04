@@ -91,6 +91,10 @@
     "income_this_month": "Income this month",
     "expense_this_month": "Expense this month",
     "balance_this_month": "Net balance",
+    "all_time_overview": "Overview",
+    "all_time_income": "Total income",
+    "all_time_expense": "Total expenses",
+    "net_balance": "Net savings",
     "chart_income": "Income",
     "chart_expense": "Expense",
     "no_data_chart": "No data yet",
@@ -522,6 +526,16 @@
     "notifications_desc": "Enable/disable all notifications",
     "dark_mode": "Dark Mode",
     "about": "About",
+    "feedback_title": "Feedback",
+    "feedback_placeholder": "Share your thoughts...",
+    "feedback_send": "Send",
+    "feedback_success": "Your feedback has been sent, thank you!",
+    "feedback_char_count": "{{count}}/500",
+    "legal_documents": "Legal Documents",
+    "privacy_policy": "Privacy Policy",
+    "terms_of_service": "Terms of Service",
+    "save_document": "Save",
+    "document_saved": "Saved ✓",
     "change_password": "Change Password",
     "sign_out": "Sign Out",
     "current_password": "Current Password",
@@ -687,7 +701,12 @@
     "error_email_required": "Email is required",
     "success_register": "Registration successful! Check your email",
     "welcome_back": "Welcome Back",
-    "create_account": "Create Account"
+    "create_account": "Create Account",
+    "accept_privacy_policy": "I have read and agree to the Privacy Policy",
+    "accept_terms": "I have read and agree to the Terms of Service",
+    "read_privacy_policy": "Privacy Policy",
+    "read_terms": "Terms of Service",
+    "agreements_required": "Please accept both documents to continue"
   },
   "onboarding": {
     "welcome_title": "Hello! 👋",
@@ -846,7 +865,8 @@
     "prev_same": "→ Same as last week",
     "expense_increased": "↑ {{pct}}% increased",
     "expense_decreased": "↓ {{pct}}% decreased",
-    "expense_unchanged": "Unchanged"
+    "expense_unchanged": "Unchanged",
+    "already_refreshed_today": "Already refreshed today"
   },
   "friends": {
     "title": "My Friends",

@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, X } from 'lucide-react';
 import { signIn, signUp, resetPassword } from '@/lib/auth';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useLanguageStore } from '@/store/useLanguageStore';
+import { supabase } from '@/lib/supabase';
 import zeekyLogo from '@/assets/zeeky-logo.png';
+
+interface LegalDoc {
+  id: string;
+  doc_type: 'privacy_policy' | 'terms_of_service';
+  language: string;
+  version: string;
+  title: string;
+  content: string;
+}
 
 type Tab = 'login' | 'register';
 
@@ -53,6 +63,28 @@ export default function AuthPage() {
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
 
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [legalModal, setLegalModal] = useState<LegalDoc | null>(null);
+  const [legalLoading, setLegalLoading] = useState(false);
+
+  const openLegal = async (docType: 'privacy_policy' | 'terms_of_service') => {
+    setLegalLoading(true);
+    const lang = language ?? 'tr';
+    const { data } = await supabase
+      .from('legal_documents')
+      .select('*')
+      .eq('type', docType)
+      .eq('language', lang)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setLegalLoading(false);
+    if (data) {
+      setLegalModal(data as LegalDoc);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       navigate('/', { replace: true });
@@ -90,15 +122,44 @@ export default function AuthPage() {
       setError(t('auth.error_password_mismatch'));
       return;
     }
+    if (!acceptPrivacy || !acceptTerms) {
+      setError(t('auth.agreements_required'));
+      return;
+    }
     setLoading(true);
     const { data, error } = await signUp(email.trim(), password, fullName.trim());
     setLoading(false);
     if (error) {
       console.error('Signup error:', error);
-      console.error('Signup error message:', error.message);
-      console.error('Signup error status:', error.status);
       setError(mapAuthError(error.message, t));
       return;
+    }
+    // Save consent record
+    if (data?.user?.id) {
+      const lang = language ?? 'tr';
+      const [privDoc, termsDoc] = await Promise.all([
+        supabase
+          .from('legal_documents')
+          .select('version')
+          .eq('type', 'privacy_policy')
+          .eq('language', lang)
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('legal_documents')
+          .select('version')
+          .eq('type', 'terms_of_service')
+          .eq('language', lang)
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      await supabase.from('user_consents').insert({
+        user_id: data.user.id,
+        privacy_policy_version: privDoc.data?.version ?? '1.0',
+        terms_version: termsDoc.data?.version ?? '1.0',
+      });
     }
     navigate('/onboarding');
   };
@@ -332,9 +393,51 @@ export default function AuthPage() {
                   </button>
                 </div>
               </div>
+              {/* Onay checkbox'ları */}
+              <div className="space-y-3 pt-1">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptPrivacy}
+                    onChange={e => setAcceptPrivacy(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 accent-blue-600 shrink-0"
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    {t('auth.accept_privacy_policy').split(t('auth.read_privacy_policy'))[0]}
+                    <button
+                      type="button"
+                      onClick={() => void openLegal('privacy_policy')}
+                      className="text-blue-600 font-semibold underline underline-offset-2"
+                    >
+                      {t('auth.read_privacy_policy')}
+                    </button>
+                    {t('auth.accept_privacy_policy').split(t('auth.read_privacy_policy'))[1]}
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptTerms}
+                    onChange={e => setAcceptTerms(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 accent-blue-600 shrink-0"
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    {t('auth.accept_terms').split(t('auth.read_terms'))[0]}
+                    <button
+                      type="button"
+                      onClick={() => void openLegal('terms_of_service')}
+                      className="text-blue-600 font-semibold underline underline-offset-2"
+                    >
+                      {t('auth.read_terms')}
+                    </button>
+                    {t('auth.accept_terms').split(t('auth.read_terms'))[1]}
+                  </span>
+                </label>
+              </div>
+
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !acceptPrivacy || !acceptTerms}
                 className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 mt-2"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -402,6 +505,46 @@ export default function AuthPage() {
               </button>
             </form>
           )}
+        </div>
+      )}
+
+      {/* Legal document modal */}
+      {(legalModal || legalLoading) && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60">
+          <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-3xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                {legalLoading ? '...' : legalModal?.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLegalModal(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {legalLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                </div>
+              ) : (
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                  {legalModal?.content}
+                </p>
+              )}
+            </div>
+            <div className="px-5 py-4 shrink-0">
+              <button
+                type="button"
+                onClick={() => setLegalModal(null)}
+                className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm"
+              >
+                {t('common.close')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

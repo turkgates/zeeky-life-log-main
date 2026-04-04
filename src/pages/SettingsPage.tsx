@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sun, Moon, Info, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Info, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -78,6 +78,20 @@ export default function SettingsPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  const handleFeedbackSend = async () => {
+    const msg = feedbackText.trim();
+    if (!msg || !userId) return;
+    setFeedbackSending(true);
+    const { error } = await supabase.from('feedback').insert({ user_id: userId, message: msg });
+    setFeedbackSending(false);
+    if (error) { toast.error('Hata oluştu'); return; }
+    toast.success(t('settings.feedback_success'));
+    setFeedbackText('');
+  };
 
   const currencySymbolMap: Record<string, string> = { eur: '€', usd: '$', try: '₺' };
   const currencySymbol = currencySymbolMap[settings.currency_key] ?? '€';
@@ -528,6 +542,44 @@ export default function SettingsPage() {
               />
             </div>
           ))}
+        </div>
+
+        {/* Görüş & Öneriler */}
+        <div className="bg-card border border-border rounded-2xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFeedbackOpen(o => !o)}
+            className="flex items-center justify-between w-full px-4 py-4"
+          >
+            <h2 className="text-sm font-semibold">{t('settings.feedback_title')}</h2>
+            {feedbackOpen
+              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          </button>
+          {feedbackOpen && (
+            <div className="px-4 pb-4">
+              <textarea
+                value={feedbackText}
+                onChange={e => setFeedbackText(e.target.value.slice(0, 500))}
+                placeholder={t('settings.feedback_placeholder')}
+                rows={4}
+                className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none focus:border-primary transition-colors"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-muted-foreground">
+                  {t('settings.feedback_char_count', { count: feedbackText.length })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleFeedbackSend()}
+                  disabled={!feedbackText.trim() || feedbackSending}
+                  className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 active:scale-[0.97] transition-transform"
+                >
+                  {feedbackSending ? <Loader2 className="w-4 h-4 animate-spin" /> : t('settings.feedback_send')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Admin Paneli */}

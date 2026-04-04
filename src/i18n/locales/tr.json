@@ -91,6 +91,10 @@
     "income_this_month": "Bu ay gelir",
     "expense_this_month": "Bu ay gider",
     "balance_this_month": "Net bakiye",
+    "all_time_overview": "Genel Bakış",
+    "all_time_income": "Toplam gelir",
+    "all_time_expense": "Toplam gider",
+    "net_balance": "Net birikim",
     "chart_income": "Gelir",
     "chart_expense": "Gider",
     "no_data_chart": "Henüz veri yok",
@@ -522,6 +526,16 @@
     "notifications_desc": "Tüm bildirimleri aç/kapat",
     "dark_mode": "Karanlık Mod",
     "about": "Hakkında",
+    "feedback_title": "Görüş & Öneriler",
+    "feedback_placeholder": "Düşüncelerinizi yazın...",
+    "feedback_send": "Gönder",
+    "feedback_success": "Geri bildiriminiz iletildi, teşekkürler!",
+    "feedback_char_count": "{{count}}/500",
+    "legal_documents": "Sözleşmeler",
+    "privacy_policy": "Gizlilik Politikası",
+    "terms_of_service": "Kullanıcı Sözleşmesi",
+    "save_document": "Kaydet",
+    "document_saved": "Kaydedildi ✓",
     "change_password": "Şifre Değiştir",
     "sign_out": "Çıkış Yap",
     "current_password": "Mevcut Şifre",
@@ -687,7 +701,12 @@
     "error_email_required": "E-posta gerekli",
     "success_register": "Kayıt başarılı! E-postanı kontrol et",
     "welcome_back": "Tekrar Hoş Geldin",
-    "create_account": "Hesap Oluştur"
+    "create_account": "Hesap Oluştur",
+    "accept_privacy_policy": "Gizlilik Politikasını okudum ve kabul ediyorum",
+    "accept_terms": "Kullanıcı Sözleşmesini okudum ve kabul ediyorum",
+    "read_privacy_policy": "Gizlilik Politikası",
+    "read_terms": "Kullanıcı Sözleşmesi",
+    "agreements_required": "Devam etmek için lütfen her iki belgeyi de kabul et"
   },
   "onboarding": {
     "welcome_title": "Merhaba! 👋",
@@ -846,7 +865,8 @@
     "prev_same": "→ Önceki hafta ile aynı",
     "expense_increased": "↑ %{{pct}} arttı",
     "expense_decreased": "↓ %{{pct}} azaldı",
-    "expense_unchanged": "Değişmedi"
+    "expense_unchanged": "Değişmedi",
+    "already_refreshed_today": "Bugün zaten yenilendi"
   },
   "friends": {
     "title": "Arkadaşlarım",

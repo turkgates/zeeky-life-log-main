@@ -12,8 +12,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.3.0"),
-        .package(name: "CapacitorGeolocation", path: "..\..\..\node_modules\@capacitor\geolocation"),
-        .package(name: "FlomentumsolutionsCapacitorHealthExtended", path: "..\..\..\node_modules\@flomentumsolutions\capacitor-health-extended")
+        .package(name: "CapacitorGeolocation", path: "../../../node_modules/@capacitor/geolocation"),
+        .package(name: "FlomentumsolutionsCapacitorHealthExtended", path: "../../../node_modules/@flomentumsolutions/capacitor-health-extended")
     ],
     targets: [
         .target(

@@ -11,6 +11,7 @@ import { FriendAutocomplete } from '@/components/FriendAutocomplete';
 import { useTranslation } from 'react-i18next';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { formatDate } from '@/lib/dateLocale';
+import { getLocalDateString, getLocalNoonISOStringFromYMD } from '@/lib/dateUtils';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import {
   MAX_DURATION_PICKER_MINS,
@@ -179,7 +180,7 @@ export default function AddActionPage() {
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [title,           setTitle]           = useState('');
-  const [date,            setDate]            = useState(new Date().toISOString().slice(0, 10));
+  const [date,            setDate]            = useState(getLocalDateString());
   const [isFavorite,      setIsFavorite]      = useState(false);
   const [activityDurationMins, setActivityDurationMins] = useState<number | null>(null);
   const [calories,        setCalories]        = useState('');
@@ -303,7 +304,7 @@ export default function AddActionPage() {
         duration_mins: durationMins,
         location:     location_.trim() || null,
         people,
-        activity_date: new Date(`${date}T12:00:00`).toISOString(),
+        activity_date: getLocalNoonISOStringFromYMD(date),
         created_via:  'manual' as const,
         raw_message:  notes.trim() || title.trim(),
         is_favorite:  isFavorite,
@@ -332,7 +333,7 @@ export default function AddActionPage() {
           amount:           parseFloat(amount),
           currency:         currencyCode ?? 'TRY',
           category:         selCat === 'alışveriş' ? 'Alışveriş' : 'Yiyecek & İçecek',
-          transaction_date: new Date(`${date}T12:00:00`).toISOString(),
+          transaction_date: getLocalNoonISOStringFromYMD(date),
           created_via:      'manual',
         });
       }

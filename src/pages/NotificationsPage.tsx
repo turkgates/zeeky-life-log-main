@@ -7,6 +7,7 @@ import { useNotificationStore } from '@/store/useNotificationStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useTranslation } from 'react-i18next';
+import { getLocalDayUTCRangeISO } from '@/lib/dateUtils';
 
 interface Notification {
   id: string;
@@ -154,14 +155,14 @@ export default function NotificationsPage() {
 
   const regenerateNotifications = useCallback(async () => {
     if (!userId) return;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const { start: todayStart, end: todayEnd } = getLocalDayUTCRangeISO(new Date());
     await supabase
       .from('notifications')
       .delete()
       .eq('user_id', userId)
       .eq('is_read', false)
-      .gte('created_at', `${todayStr}T00:00:00.000Z`)
-      .lte('created_at', `${todayStr}T23:59:59.999Z`);
+      .gte('created_at', todayStart)
+      .lte('created_at', todayEnd);
     await generateNotifications();
     await loadNotifications();
   }, [userId, generateNotifications, loadNotifications]);
@@ -169,14 +170,14 @@ export default function NotificationsPage() {
   const checkAndGenerate = useCallback(async () => {
     if (!userId) return;
     const lang = useLanguageStore.getState().language;
-    const today = new Date().toISOString().split('T')[0];
+    const { start: todayStart, end: todayEnd } = getLocalDayUTCRangeISO(new Date());
 
     const { data: todayNotifs } = await supabase
       .from('notifications')
       .select('id, title')
       .eq('user_id', userId)
-      .gte('created_at', `${today}T00:00:00.000Z`)
-      .lte('created_at', `${today}T23:59:59.999Z`)
+      .gte('created_at', todayStart)
+      .lte('created_at', todayEnd)
       .limit(1);
 
     if (!todayNotifs || todayNotifs.length === 0) {
