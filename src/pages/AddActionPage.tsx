@@ -1,6 +1,7 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Loader2, Star } from 'lucide-react';
+import { ArrowLeft, Loader2, Star, MapPin } from 'lucide-react';
+import { getCurrentLocation } from '@/hooks/useLocation';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCurrencyStore } from '@/store/useCurrencyStore';
@@ -193,6 +194,24 @@ export default function AddActionPage() {
   const [travelDays,      setTravelDays]      = useState('');
   const [quantity,        setQuantity]        = useState('');
   const [quantityUnit,    setQuantityUnit]    = useState('');
+  const [locationLat,     setLocationLat]     = useState<number | null>(null);
+  const [locationLon,     setLocationLon]     = useState<number | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const screenHeight = window.screen.height;
+      setKeyboardOpen(viewportHeight < screenHeight * 0.75);
+    };
+    window.visualViewport?.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // ── Plan & monthly activity count check ───────────────────────────────────
   useEffect(() => {
@@ -260,6 +279,8 @@ export default function AddActionPage() {
         setNotes(data.raw_message ?? '');
         setQuantity(data.quantity != null && data.quantity !== '' ? String(data.quantity as number) : '');
         setQuantityUnit(typeof data.quantity_unit === 'string' ? data.quantity_unit : '');
+        setLocationLat((data as any).location_lat ?? null);
+        setLocationLon((data as any).location_lon ?? null);
       })
       .finally(() => setLoading(false));
   }, [editId, userId]);
@@ -270,6 +291,21 @@ export default function AddActionPage() {
   const handleSelectCategory = (id: CategoryId) => {
     setSelCat(id);
     setStep('form');
+  };
+
+  // ── Get current location ──────────────────────────────────────────────────
+  const handleGetLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const result = await getCurrentLocation();
+      if (result) {
+        setLocation_(result.shortName);
+        setLocationLat(result.lat);
+        setLocationLon(result.lon);
+      }
+    } finally {
+      setLocationLoading(false);
+    }
   };
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -310,6 +346,8 @@ export default function AddActionPage() {
         is_favorite:  isFavorite,
         quantity:     selCat === 'yeme-içme' && quantity ? Number(quantity) : null,
         quantity_unit: selCat === 'yeme-içme' ? (quantityUnit.trim() || null) : null,
+        location_lat: location_.trim() ? locationLat : null,
+        location_lon: location_.trim() ? locationLon : null,
       };
 
       if (isEditing && editId) {
@@ -381,7 +419,7 @@ export default function AddActionPage() {
     return (
       <div className="min-h-screen bg-background w-full flex flex-col">
         {/* Header */}
-        <div className="px-4 pt-12 pb-6">
+<div className="px-4 pb-4 pt-4">
           <button
             onClick={() => navigate(-1)}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-muted mb-6"
@@ -427,10 +465,20 @@ export default function AddActionPage() {
   const catColor = cat.color;
 
   return (
-    <div className="min-h-screen bg-background w-full flex flex-col">
+    <div className="min-h-screen bg-background w-full">
 
       {/* ── Colored Header ─────────────────────────────────────────────────── */}
-      <div className="px-4 pt-4 pb-5" style={{ backgroundColor: catColor }}>
+      <div
+        className="px-4 pb-5"
+        style={{
+          backgroundColor: catColor,
+          position: keyboardOpen ? 'relative' : 'sticky',
+          top: 0,
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+          marginTop: keyboardOpen ? 0 : 'calc(-1 * env(safe-area-inset-top, 0px))',
+          zIndex: 10,
+        }}
+      >
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => isEditing ? navigate(-1) : setStep('category')}
@@ -462,7 +510,7 @@ export default function AddActionPage() {
       </div>
 
       {/* ── Scrollable Form ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-28 space-y-4">
+      <div className="px-4 pt-5 pb-28 space-y-4">
 
         {/* ── COMMON: Title ── */}
         <div>
@@ -531,8 +579,37 @@ export default function AddActionPage() {
             </div>
             <div>
               <label className={labelCls}>{t('add_action.location')}</label>
-              <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder={t('add_action.location_placeholder')} className={inputCls} />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={location_}
+                  onChange={e => { setLocation_(e.target.value); setLocationLat(null); setLocationLon(null); }}
+                  placeholder={t('add_action.location_placeholder')}
+                  className={cn(inputCls, 'flex-1')}
+                />
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  disabled={locationLoading}
+                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-muted border border-border active:scale-95 transition-transform disabled:opacity-50 flex-shrink-0"
+                >
+                  {locationLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    : <MapPin className="w-4 h-4 text-muted-foreground" />
+                  }
+                </button>
+              </div>
+              {locationLat && locationLon && (
+                <div className="mt-2 rounded-2xl overflow-hidden" style={{ height: 120 }}>
+                  <iframe
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationLon - 0.001},${locationLat - 0.001},${locationLon + 0.001},${locationLat + 0.001}&layer=mapnik&marker=${locationLat},${locationLon}`}
+                    width="100%"
+                    height="120"
+                    scrolling="no"
+                    style={{ border: 'none', borderRadius: 16, pointerEvents: 'none' }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className={labelCls}>{t('add_action.notes_optional')}</label>
@@ -612,8 +689,37 @@ export default function AddActionPage() {
             </div>
             <div>
               <label className={labelCls}>{t('add_action.store_location')}</label>
-              <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder={t('add_action.store_location_placeholder')} className={inputCls} />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={location_}
+                  onChange={e => { setLocation_(e.target.value); setLocationLat(null); setLocationLon(null); }}
+                  placeholder={t('add_action.store_location_placeholder')}
+                  className={cn(inputCls, 'flex-1')}
+                />
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  disabled={locationLoading}
+                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-muted border border-border active:scale-95 transition-transform disabled:opacity-50 flex-shrink-0"
+                >
+                  {locationLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    : <MapPin className="w-4 h-4 text-muted-foreground" />
+                  }
+                </button>
+              </div>
+              {locationLat && locationLon && (
+                <div className="mt-2 rounded-2xl overflow-hidden" style={{ height: 120 }}>
+                  <iframe
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationLon - 0.001},${locationLat - 0.001},${locationLon + 0.001},${locationLat + 0.001}&layer=mapnik&marker=${locationLat},${locationLon}`}
+                    width="100%"
+                    height="120"
+                    scrolling="no"
+                    style={{ border: 'none', borderRadius: 16, pointerEvents: 'none' }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className={labelCls}>{t('add_action.notes_optional')}</label>
@@ -669,8 +775,37 @@ export default function AddActionPage() {
             </div>
             <div>
               <label className={labelCls}>{t('add_action.restaurant_location')}</label>
-              <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder={t('add_action.restaurant_location_placeholder')} className={inputCls} />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={location_}
+                  onChange={e => { setLocation_(e.target.value); setLocationLat(null); setLocationLon(null); }}
+                  placeholder={t('add_action.restaurant_location_placeholder')}
+                  className={cn(inputCls, 'flex-1')}
+                />
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  disabled={locationLoading}
+                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-muted border border-border active:scale-95 transition-transform disabled:opacity-50 flex-shrink-0"
+                >
+                  {locationLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    : <MapPin className="w-4 h-4 text-muted-foreground" />
+                  }
+                </button>
+              </div>
+              {locationLat && locationLon && (
+                <div className="mt-2 rounded-2xl overflow-hidden" style={{ height: 120 }}>
+                  <iframe
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationLon - 0.001},${locationLat - 0.001},${locationLon + 0.001},${locationLat + 0.001}&layer=mapnik&marker=${locationLat},${locationLon}`}
+                    width="100%"
+                    height="120"
+                    scrolling="no"
+                    style={{ border: 'none', borderRadius: 16, pointerEvents: 'none' }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className={labelCls}>{t('add_action.people')}</label>
@@ -695,8 +830,37 @@ export default function AddActionPage() {
           <>
             <div>
               <label className={labelCls}>{t('add_action.destination')}</label>
-              <input type="text" value={location_} onChange={e => setLocation_(e.target.value)}
-                placeholder={t('add_action.destination_placeholder')} className={inputCls} />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={location_}
+                  onChange={e => { setLocation_(e.target.value); setLocationLat(null); setLocationLon(null); }}
+                  placeholder={t('add_action.destination_placeholder')}
+                  className={cn(inputCls, 'flex-1')}
+                />
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  disabled={locationLoading}
+                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-muted border border-border active:scale-95 transition-transform disabled:opacity-50 flex-shrink-0"
+                >
+                  {locationLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    : <MapPin className="w-4 h-4 text-muted-foreground" />
+                  }
+                </button>
+              </div>
+              {locationLat && locationLon && (
+                <div className="mt-2 rounded-2xl overflow-hidden" style={{ height: 120 }}>
+                  <iframe
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationLon - 0.001},${locationLat - 0.001},${locationLon + 0.001},${locationLat + 0.001}&layer=mapnik&marker=${locationLat},${locationLon}`}
+                    width="100%"
+                    height="120"
+                    scrolling="no"
+                    style={{ border: 'none', borderRadius: 16, pointerEvents: 'none' }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className={labelCls}>{t('add_action.duration_days')}</label>

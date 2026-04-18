@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Footprints, Activity, BedDouble, Heart, Flame } from 'lucide-react';
 import { supabase, getUserCurrency } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
@@ -20,6 +20,12 @@ export interface WeeklySummaryData {
   top_activities: string[];
   top_people: string[];
   top_expense_categories: string[];
+  healthkit_total_steps?: number;
+  healthkit_total_distance_km?: number;
+  healthkit_total_calories?: number;
+  healthkit_avg_sleep?: number;
+  healthkit_avg_heart_rate?: number;
+  healthkit_days_count?: number;
 }
 
 interface Props {
@@ -336,6 +342,76 @@ export default function WeeklySummaryPage({ isOpen, onClose }: Props) {
                   <p className="mt-1 text-xs text-gray-500">{t('weekly_summary.recorded_this_week')}</p>
                 </div>
               </div>
+
+              {/* HealthKit bölümü */}
+              {(summary.healthkit_days_count ?? 0) > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-gray-800">
+                    {language === 'en'
+                      ? '📱 iPhone Health Data'
+                      : language === 'fr'
+                        ? '📱 Données de santé iPhone'
+                        : '📱 iPhone Sağlık Verileri'}
+                  </h3>
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    {summary.healthkit_total_steps !== undefined && (
+                      <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-3 text-white">
+                        <Footprints className="h-5 w-5 opacity-90" />
+                        <p className="mt-1 text-xs font-medium opacity-80">
+                          {language === 'en' ? 'Total Steps' : language === 'fr' ? 'Pas totaux' : 'Toplam Adım'}
+                        </p>
+                        <p className="mt-0.5 text-lg font-semibold">
+                          {summary.healthkit_total_steps.toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                    {summary.healthkit_total_distance_km !== undefined && (
+                      <div className="rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 p-3 text-white">
+                        <Activity className="h-5 w-5 opacity-90" />
+                        <p className="mt-1 text-xs font-medium opacity-80">
+                          {language === 'en' ? 'Total Distance' : language === 'fr' ? 'Distance totale' : 'Toplam Mesafe'}
+                        </p>
+                        <p className="mt-0.5 text-lg font-semibold">
+                          {summary.healthkit_total_distance_km.toFixed(1)} km
+                        </p>
+                      </div>
+                    )}
+                    {summary.healthkit_avg_sleep !== undefined && (
+                      <div className="rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-700 p-3 text-white">
+                        <BedDouble className="h-5 w-5 opacity-90" />
+                        <p className="mt-1 text-xs font-medium opacity-80">
+                          {language === 'en' ? 'Avg Sleep' : language === 'fr' ? 'Sommeil moy.' : 'Ort. Uyku'}
+                        </p>
+                        <p className="mt-0.5 text-lg font-semibold">
+                          {summary.healthkit_avg_sleep.toFixed(1)} {language === 'en' ? 'h' : language === 'fr' ? 'h' : 'sa'}
+                        </p>
+                      </div>
+                    )}
+                    {summary.healthkit_avg_heart_rate !== undefined && (
+                      <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-violet-700 p-3 text-white">
+                        <Heart className="h-5 w-5 opacity-90" />
+                        <p className="mt-1 text-xs font-medium opacity-80">
+                          {language === 'en' ? 'Avg Heart Rate' : language === 'fr' ? 'Fréq. cardiaque' : 'Ort. Kalp Atışı'}
+                        </p>
+                        <p className="mt-0.5 text-lg font-semibold">
+                          {Math.round(summary.healthkit_avg_heart_rate)} bpm
+                        </p>
+                      </div>
+                    )}
+                    {summary.healthkit_total_calories !== undefined && (
+                      <div className="col-span-2 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 p-3 text-white">
+                        <Flame className="h-5 w-5 opacity-90" />
+                        <p className="mt-1 text-xs font-medium opacity-80">
+                          {language === 'en' ? 'Total Active Calories' : language === 'fr' ? 'Calories actives totales' : 'Toplam Aktif Kalori'}
+                        </p>
+                        <p className="mt-0.5 text-lg font-semibold">
+                          {Math.round(summary.healthkit_total_calories).toLocaleString()} kcal
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Top activities */}
               <div className="mt-6">

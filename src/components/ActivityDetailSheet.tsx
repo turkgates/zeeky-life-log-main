@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Pencil, Trash2, Clock, Users, Wallet, Star, Film,
@@ -29,6 +29,33 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
   const dragStartY = useRef(0);
   const dragging   = useRef(false);
   const [dragOffset, setDragOffset] = useState(0);
+  const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lon: number } | null>(null);
+
+  useEffect(() => {
+    setGeocodedCoords(null);
+    if (!activity) return;
+    const details = activity.details || {};
+    const locationName = details.locationName as string | undefined;
+    const activityLocationText = (activity as any).location as string | undefined;
+    const locationLat = (activity as any).location_lat as number | undefined;
+    const locationLon = (activity as any).location_lon as number | undefined;
+    const hasStoredCoords = locationLat != null && locationLon != null;
+    if (hasStoredCoords) return;
+    if (!activityLocationText && !locationName) return;
+    const query = activityLocationText || locationName || '';
+    if (!query || query.length < 3) return;
+
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
+      headers: { 'User-Agent': 'Zeeky-App/1.0' },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.[0]) {
+          setGeocodedCoords({ lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) });
+        }
+      })
+      .catch(() => {});
+  }, [activity]);
 
   if (!activity) return null;
 
@@ -65,20 +92,33 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
   const wakeUp       = details.wakeUp as string | undefined;
   const location     = details.location as { lat: number; lng: number } | undefined;
   const locationName = details.locationName as string | undefined;
+  const activityLocationText = (activity as any).location as string | undefined;
+  const locationLat = (activity as any).location_lat as number | undefined;
+  const locationLon = (activity as any).location_lon as number | undefined;
+  const hasStoredCoords = locationLat != null && locationLon != null;
+
+  console.log('location debug:', {
+    locationLat,
+    locationLon,
+    hasStoredCoords,
+    activityLocation: (activity as any).location,
+    activityId: activity.id,
+  });
 
   const starRating = activity.category === 'uyudum' ? quality : activity.category === 'izledim' ? rating : undefined;
 
   const hasCoords = location && location.lat != null && location.lng != null
     && !Number.isNaN(location.lat) && !Number.isNaN(location.lng);
 
-  const mapUrl = hasCoords
-    ? `https://staticmap.openstreetmap.de/staticmap.php?center=${location!.lat},${location!.lng}&zoom=15&size=580x280&markers=${location!.lat},${location!.lng},red-pushpin`
-    : null;
-  const googleMapsUrl = hasCoords
+  const googleMapsUrl = hasStoredCoords
+    ? `https://www.google.com/maps?q=${locationLat},${locationLon}`
+    : hasCoords
     ? `https://www.google.com/maps?q=${location!.lat},${location!.lng}`
     : locationName
-      ? `https://www.google.com/maps/search/${encodeURIComponent(locationName)}`
-      : null;
+    ? `https://www.google.com/maps/search/${encodeURIComponent(locationName)}`
+    : activityLocationText
+    ? `https://www.google.com/maps/search/${encodeURIComponent(activityLocationText)}`
+    : null;
 
   const rows: { icon: React.ReactNode; label: string; value: React.ReactNode }[] = [];
 
@@ -124,6 +164,13 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
   }
   if (contentName && activity.category === 'izledim') {
     rows.push({ icon: <Film className="w-4 h-4" />, label: t('history.detail.content'), value: <span className="text-sm">{contentName}</span> });
+  }
+  if (activityLocationText && !hasCoords && !locationName) {
+    rows.push({
+      icon: <MapPin className="w-4 h-4" />,
+      label: t('history.detail.location'),
+      value: <span className="text-sm">{activityLocationText}</span>,
+    });
   }
 
   // ── Drag to dismiss ──────────────────────────────────────────────────────
@@ -187,13 +234,23 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
           </div>
 
           {/* Map */}
-          {mapUrl ? (
+          {hasStoredCoords ? (
             <div className="mb-5">
-              <a href={googleMapsUrl!} target="_blank" rel="noopener noreferrer">
-                <img src={mapUrl} alt={t('history.detail.location')} className="w-full rounded-2xl object-cover" style={{ height: 180 }} loading="lazy" />
+              <a
+                href={googleMapsUrl!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full rounded-2xl overflow-hidden"
+                style={{ height: 180 }}
+              >
+                <iframe
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationLon! - 0.001},${locationLat! - 0.001},${locationLon! + 0.001},${locationLat! + 0.001}&layer=mapnik&marker=${locationLat},${locationLon}`}
+                  width="100%"
+                  height="180"
+                  scrolling="no"
+                  style={{ border: 'none', borderRadius: 16, pointerEvents: 'none' }}
+                />
               </a>
-              {locationName && <p className="text-xs text-muted-foreground mt-1.5">{locationName}</p>}
-              <a href={googleMapsUrl!} target="_blank" rel="noopener noreferrer" className="text-xs text-accent font-medium mt-1 inline-block">{t('history.detail.view_on_map')}</a>
             </div>
           ) : locationName ? (
             <a href={googleMapsUrl!} target="_blank" rel="noopener noreferrer" className="block mb-5">
@@ -202,6 +259,36 @@ export default function ActivityDetailSheet({ activity, onClose, onDelete }: Pro
                 <p className="text-xs text-muted-foreground">{t('history.detail.location')}: {locationName}</p>
               </div>
             </a>
+          ) : (activityLocationText || locationName) && (geocodedCoords || googleMapsUrl) ? (
+            <div className="mb-5">
+              {geocodedCoords ? (
+                <a
+                  href={`https://www.google.com/maps?q=${geocodedCoords.lat},${geocodedCoords.lon}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full rounded-2xl overflow-hidden"
+                  style={{ height: 180 }}
+                >
+                  <iframe
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${geocodedCoords.lon - 0.003},${geocodedCoords.lat - 0.003},${geocodedCoords.lon + 0.003},${geocodedCoords.lat + 0.003}&layer=mapnik&marker=${geocodedCoords.lat},${geocodedCoords.lon}`}
+                    width="100%"
+                    height="180"
+                    scrolling="no"
+                    style={{ border: 'none', borderRadius: 16, pointerEvents: 'none' }}
+                  />
+                </a>
+              ) : (
+                <a href={googleMapsUrl!} target="_blank" rel="noopener noreferrer" className="block mb-5">
+                  <div className="w-full rounded-2xl bg-muted flex flex-col items-center justify-center gap-2" style={{ height: 180 }}>
+                    <MapPin className="w-6 h-6 text-muted-foreground/50" />
+                    <p className="text-xs text-muted-foreground">{activityLocationText || locationName}</p>
+                  </div>
+                </a>
+              )}
+              {(activityLocationText || locationName) && (
+                <p className="text-xs text-muted-foreground mt-1.5">{activityLocationText || locationName}</p>
+              )}
+            </div>
           ) : null}
 
           {/* HealthKit metrics grid */}

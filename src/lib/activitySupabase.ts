@@ -106,7 +106,9 @@ export function mapRowToActivity(row: Record<string, unknown>): Activity {
       return Number.isFinite(n) ? n : null;
     })(),
     quantity_unit: typeof row.quantity_unit === 'string' ? row.quantity_unit : null,
-  };
+    location_lat: row.location_lat,
+    location_lon: row.location_lon,
+  } as Activity;
 }
 
 export async function fetchTodayActivities(userId: string): Promise<Activity[]> {
@@ -115,7 +117,7 @@ export async function fetchTodayActivities(userId: string): Promise<Activity[]> 
 
   const { data, error } = await supabase
     .from('activities')
-    .select('*')
+    .select('*, location_lat, location_lon')
     .eq('user_id', userId)
     .gte('activity_date', start)
     .lte('activity_date', end)
@@ -135,7 +137,7 @@ export async function fetchAllActivitiesOrdered(userId: string): Promise<Activit
   if (!userId) return [];
   const { data, error } = await supabase
     .from('activities')
-    .select('*')
+    .select('*, location_lat, location_lon')
     .eq('user_id', userId)
     .order('activity_date', { ascending: false });
 
@@ -151,7 +153,7 @@ export async function fetchActivitiesByDate(userId: string, dateStr: string): Pr
   const { start, end } = getLocalDayUTCRangeISOFromYMD(dateStr);
   const { data, error } = await supabase
     .from('activities')
-    .select('*')
+    .select('*, location_lat, location_lon')
     .eq('user_id', userId)
     .gte('activity_date', start)
     .lte('activity_date', end)
@@ -181,7 +183,7 @@ export async function fetchFavoriteActivities(userId: string): Promise<FavoriteA
   if (!userId) return [];
   const { data, error } = await supabase
     .from('activities')
-    .select('*')
+    .select('*, location_lat, location_lon')
     .eq('user_id', userId)
     .eq('is_favorite', true)
     .order('created_at', { ascending: false })
@@ -276,7 +278,7 @@ export async function fetchDatesWithActivities(userId: string): Promise<Set<stri
   if (!userId) return new Set();
   const { data, error } = await supabase
     .from('activities')
-    .select('created_at')
+    .select('created_at, location_lat, location_lon')
     .eq('user_id', userId);
 
   if (error || !data) return new Set();

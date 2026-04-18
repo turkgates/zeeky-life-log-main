@@ -181,9 +181,7 @@ export default function HistoryPage() {
       .eq('user_id', userId)
       .gte('activity_date', startOfMonth)
       .lte('activity_date', endOfMonth);
-    console.log('loadDatesForMonth data:', data, 'startOfMonth:', startOfMonth, 'endOfMonth:', endOfMonth);
     if (!data) return new Set();
-    console.log('dates parsed:', data?.map(r => (r.activity_date as string).split('T')[0]));
     return new Set(data.map(r => {
       const d = r.activity_date as string;
       return d.split('T')[0].split(' ')[0];
@@ -355,7 +353,14 @@ export default function HistoryPage() {
     <div className="pb-24 w-full animate-fade-in">
 
       {/* ── Title + search (sticky) ───────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-background">
+      <div
+        className="sticky z-10 bg-background"
+        style={{
+          top: 0,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          marginTop: 'calc(-1 * env(safe-area-inset-top, 0px))',
+        }}
+      >
         <div className="px-4 pt-4 pb-2 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">{t('history.title')}</h1>
           <div className="flex items-center gap-2">

@@ -2,9 +2,6 @@ import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
 import { getLocalDateString, getLocalISOString } from '@/lib/dateUtils';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Health = (window as any).Capacitor?.Plugins?.CapacitorHealthExtended;
-
 export interface HealthDayData {
   steps?: number;
   distance_km?: number;
@@ -41,7 +38,8 @@ function buildCategoryTitle(language: string): string {
 }
 
 // ── Fetch one day from HealthKit ─────────────────────────────────────────────
-async function fetchDayData(dateStr: string): Promise<HealthDayData> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchDayData(dateStr: string, Health: any): Promise<HealthDayData> {
   const data: HealthDayData = {};
   const start = new Date(`${dateStr}T00:00:00`);
   const end   = new Date(`${dateStr}T23:59:59`);
@@ -53,7 +51,8 @@ async function fetchDayData(dateStr: string): Promise<HealthDayData> {
       endDate: end.toISOString(),
       bucket: 'day',
     });
-    if (res?.value) data.steps = Math.round(res.value);
+    const firstItem = res?.aggregatedData?.[0];
+    if (firstItem?.value) data.steps = Math.round(firstItem.value);
   } catch {}
 
   try {
@@ -63,17 +62,19 @@ async function fetchDayData(dateStr: string): Promise<HealthDayData> {
       endDate: end.toISOString(),
       bucket: 'day',
     });
-    if (res?.value) data.distance_km = Math.round(res.value / 10) / 100; // metre → km
+    const firstItem = res?.aggregatedData?.[0];
+    if (firstItem?.value) data.distance_km = Math.round(firstItem.value / 10) / 100; // metre → km
   } catch {}
 
   try {
     const res = await Health?.queryAggregated({
-      dataType: 'calories',
+      dataType: 'active-calories',
       startDate: start.toISOString(),
       endDate: end.toISOString(),
       bucket: 'day',
     });
-    if (res?.value) data.calories = Math.round(res.value);
+    const firstItem = res?.aggregatedData?.[0];
+    if (firstItem?.value) data.calories = Math.round(firstItem.value);
   } catch {}
 
   try {
@@ -89,17 +90,19 @@ async function fetchDayData(dateStr: string): Promise<HealthDayData> {
       endDate: sleepEnd.toISOString(),
       bucket: 'day',
     });
-    if (res?.value) data.sleepHours = Math.round((res.value / 60) * 10) / 10;
+    const firstItem = res?.aggregatedData?.[0];
+    if (firstItem?.value) data.sleepHours = Math.round((firstItem.value / 60 / 60) * 10) / 10;
   } catch {}
 
   try {
     const res = await Health?.queryAggregated({
-      dataType: 'heartRate',
+      dataType: 'heart-rate',
       startDate: start.toISOString(),
       endDate: end.toISOString(),
       bucket: 'day',
     });
-    if (res?.value) data.heartRate = Math.round(res.value);
+    const firstItem = res?.aggregatedData?.[0];
+    if (firstItem?.value) data.heartRate = Math.round(firstItem.value);
   } catch {}
 
   return data;
@@ -132,12 +135,20 @@ export async function syncHealthKitActivities(
   userId: string,
   language: string,
 ): Promise<void> {
+  const Health = (window as any).Capacitor?.Plugins?.HealthPlugin as any;
+
   if (!Capacitor.isNativePlatform() || !Health) return;
 
   // İzin iste
   try {
-    await Health.requestAuthorization({
-      read: ['steps', 'distance', 'calories', 'sleep', 'heartRate'],
+    await Health.requestHealthPermissions({
+      permissions: [
+        'READ_STEPS',
+        'READ_DISTANCE',
+        'READ_ACTIVE_CALORIES',
+        'READ_SLEEP',
+        'READ_HEART_RATE',
+      ],
     });
   } catch {
     return;
@@ -157,7 +168,7 @@ export async function syncHealthKitActivities(
   if (datesToSync.length === 0) return;
 
   for (const dateStr of datesToSync) {
-    const dayData = await fetchDayData(dateStr);
+    const dayData = await fetchDayData(dateStr, Health);
 
     const hasData = dayData.steps || dayData.distance_km ||
                     dayData.calories || dayData.sleepHours || dayData.heartRate;

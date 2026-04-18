@@ -264,6 +264,14 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-background w-full animate-slide-up">
+      <div
+        className="sticky z-10 bg-background"
+        style={{
+          top: 0,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          marginTop: 'calc(-1 * env(safe-area-inset-top, 0px))',
+        }}
+      />
       <div className="flex items-center gap-3 p-4 border-b border-border">
         <button onClick={() => navigate(-1)} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-muted">
           <ArrowLeft className="w-5 h-5" />

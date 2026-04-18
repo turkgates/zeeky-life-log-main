@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import WeeklySummaryPage from '@/pages/WeeklySummaryPage';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { getCurrentLocation } from '@/hooks/useLocation';
 import zeekyAvatar from '@/assets/zeeky-avatar.png';
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -350,8 +351,11 @@ export default function HomePage() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), CHAT_FETCH_MS);
 
+      const locationPromise = getCurrentLocation();
+
       let response: Response;
       try {
+        const location = await locationPromise;
         response = await fetch(zeekyChatUrl, {
           method: 'POST',
           headers: {
@@ -366,6 +370,7 @@ export default function HomePage() {
             language,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             current_datetime: new Date().toISOString(),
+            location: location ?? null,
           }),
           signal: controller.signal,
         });
@@ -395,13 +400,6 @@ export default function HomePage() {
         reply?: string;
         extracted_data?: { activities?: Array<{ people?: string[] }>; has_activity?: boolean; has_transaction?: boolean; transactions?: unknown };
       };
-
-      console.log('Zeeky full response:', JSON.stringify(data));
-      console.log('Extracted data:', data.extracted_data);
-      console.log('Has activity:', data.extracted_data?.has_activity);
-      console.log('Activities:', data.extracted_data?.activities);
-      console.log('Has transaction:', data.extracted_data?.has_transaction);
-      console.log('Transactions:', data.extracted_data?.transactions);
 
       const reply = typeof data.reply === 'string' ? data.reply : '';
       if (reply.trim()) {
@@ -498,6 +496,7 @@ export default function HomePage() {
           right: 0,
           minHeight: `calc(${TOP_BAR_HEIGHT}px + env(safe-area-inset-top, 0px))`,
           zIndex: 40,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
         className="flex items-center justify-between px-4 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 box-border pt-safe"
       >

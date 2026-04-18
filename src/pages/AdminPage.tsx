@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Search, Users, BarChart2, Settings, MessageSquare, ScrollText } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from '@/lib/supabase';
 import { getLocalISOString } from '@/lib/dateUtils';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,14 @@ interface AdminStats {
   messages_7days: number;
   total_activities: number;
   total_transactions: number;
+  active_users_today: number;
+  active_users_7days: number;
+  active_users_30days: number;
+  new_users_30days: number;
+  users_tr: number;
+  users_en: number;
+  users_fr: number;
+  estimated_monthly_revenue_eur: number;
 }
 
 interface AdminUser {
@@ -102,6 +111,27 @@ export function AdminPage() {
   // ── Overview ──────────────────────────────────────────────────────────────
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [categoryStats, setCategoryStats] = useState<{ name: string; count: number }[]>([]);
+
+  const CATEGORY_TR: Record<string, string> = {
+    'sağlık-spor': 'Sağlık & Spor',
+    'sosyal': 'Sosyal',
+    'iş-eğitim': 'İş & Eğitim',
+    'eğlence': 'Eğlence',
+    'alışveriş': 'Alışveriş',
+    'yeme-içme': 'Yeme & İçme',
+    'seyahat': 'Seyahat',
+    'ev-yaşam': 'Ev & Yaşam',
+    'harcama': 'Harcama',
+    'diğer': 'Diğer',
+    'gittim': 'Gittim',
+    'yaptim': 'Yaptım',
+    'uyudum': 'Uyudum',
+    'izledim': 'İzledim',
+    'spor': 'Spor',
+    'sağlık': 'Sağlık',
+    'iş': 'İş',
+  };
 
   useEffect(() => {
     setStatsLoading(true);
@@ -111,6 +141,26 @@ export function AdminPage() {
       .single()
       .then(({ data }) => setStats(data as AdminStats))
       .finally(() => setStatsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    supabase
+      .from('activities')
+      .select('category')
+      .then(({ data }) => {
+        if (!data) return;
+        const counts: Record<string, number> = {};
+        for (const row of data) {
+          const cat = (row.category as string) || 'diğer';
+          counts[cat] = (counts[cat] ?? 0) + 1;
+        }
+        const sorted = Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([key, count]) => ({ name: CATEGORY_TR[key] ?? key, count }));
+        setCategoryStats(sorted);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Users ─────────────────────────────────────────────────────────────────
@@ -305,6 +355,14 @@ export function AdminPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white w-full">
+      <div
+        className="sticky z-10 bg-background"
+        style={{
+          top: 0,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          marginTop: 'calc(-1 * env(safe-area-inset-top, 0px))',
+        }}
+      />
       {/* Header */}
       <div className="bg-gray-900 border-b border-gray-800 px-4 pt-4 pb-0 shrink-0">
         <div className="flex items-center gap-3 mb-4">
@@ -346,7 +404,7 @@ export function AdminPage() {
 
       {/* ── OVERVIEW ──────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
-        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-24 space-y-6">
           {statsLoading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
@@ -357,16 +415,154 @@ export function AdminPage() {
               <span className="text-xs">admin_stats view mevcut mu?</span>
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <StatCard icon="👥" label="Toplam Kullanıcı"    value={stats.total_users}       />
-              <StatCard icon="⭐" label="Premium Kullanıcı"   value={stats.premium_users}     />
-              <StatCard icon="🆓" label="Ücretsiz Kullanıcı"  value={stats.free_users}        />
-              <StatCard icon="🆕" label="Son 7 Günde Yeni"    value={stats.new_users_7days}   />
-              <StatCard icon="💬" label="Bugün Sohbet"        value={stats.messages_today}    />
-              <StatCard icon="📊" label="Son 7 Gün Sohbet"    value={stats.messages_7days}    />
-              <StatCard icon="🎯" label="Toplam Eylem"        value={stats.total_activities}  />
-              <StatCard icon="💰" label="Toplam İşlem"        value={stats.total_transactions}/>
-            </div>
+            <>
+              {/* ── BÖLÜM 1: Kullanıcı Özeti ── */}
+              <div>
+                <p className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-3">👥 Kullanıcı Özeti</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard icon="👥" label="Toplam Kullanıcı"   value={stats.total_users}      />
+                  <StatCard icon="⭐" label="Premium Kullanıcı"  value={stats.premium_users}    />
+                  <StatCard icon="🆓" label="Ücretsiz Kullanıcı" value={stats.free_users}       />
+                  <StatCard icon="🆕" label="Son 7 Günde Yeni"   value={stats.new_users_7days}  />
+                </div>
+              </div>
+
+              {/* ── BÖLÜM 2: Aktif Kullanıcılar ── */}
+              <div>
+                <p className="text-xs font-bold text-green-400 uppercase tracking-wider mb-3">🟢 Aktif Kullanıcılar</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-green-900/30 border border-green-800/50 rounded-2xl p-3 flex flex-col gap-1">
+                    <p className="text-[10px] text-green-400 font-medium">Bugün Aktif</p>
+                    <p className="text-xl font-bold text-white">{stats.active_users_today ?? '—'}</p>
+                  </div>
+                  <div className="bg-green-900/30 border border-green-800/50 rounded-2xl p-3 flex flex-col gap-1">
+                    <p className="text-[10px] text-green-400 font-medium">7 Gün Aktif</p>
+                    <p className="text-xl font-bold text-white">{stats.active_users_7days ?? '—'}</p>
+                  </div>
+                  <div className="bg-green-900/30 border border-green-800/50 rounded-2xl p-3 flex flex-col gap-1">
+                    <p className="text-[10px] text-green-400 font-medium">30 Gün Aktif</p>
+                    <p className="text-xl font-bold text-white">{stats.active_users_30days ?? '—'}</p>
+                  </div>
+                </div>
+                {stats.active_users_30days > 0 && (
+                  <p className="text-xs text-green-400/70 mt-2 text-right">
+                    DAU/MAU: {((stats.active_users_today / stats.active_users_30days) * 100).toFixed(1)}%
+                  </p>
+                )}
+              </div>
+
+              {/* ── BÖLÜM 3: Gelir Tahmini ── */}
+              <div>
+                <p className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-3">💰 Gelir Tahmini</p>
+                <div className="bg-yellow-900/20 border border-yellow-700/40 rounded-2xl p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-yellow-300/80">Tahmini Aylık Gelir</span>
+                    <span className="text-xl font-bold text-yellow-400">
+                      {(stats.estimated_monthly_revenue_eur ?? 0).toFixed(0)} €
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-yellow-300/80">Tahmini Yıllık Gelir</span>
+                    <span className="text-lg font-bold text-yellow-300">
+                      {((stats.estimated_monthly_revenue_eur ?? 0) * 12).toFixed(0)} €
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-yellow-800/40 pt-3">
+                    <span className="text-sm text-yellow-300/80">Conversion Rate</span>
+                    <span className="text-lg font-bold text-yellow-300">
+                      {stats.total_users > 0
+                        ? ((stats.premium_users / stats.total_users) * 100).toFixed(1)
+                        : '0.0'}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── BÖLÜM 4: Dil Dağılımı ── */}
+              <div>
+                <p className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3">🌍 Dil Dağılımı</p>
+                <div className="bg-gray-800 rounded-2xl p-4">
+                  {(() => {
+                    const langData = [
+                      { name: 'TR 🇹🇷', value: stats.users_tr ?? 0, color: '#ef4444' },
+                      { name: 'EN 🇬🇧', value: stats.users_en ?? 0, color: '#3b82f6' },
+                      { name: 'FR 🇫🇷', value: stats.users_fr ?? 0, color: '#1e3a5f' },
+                    ];
+                    const total = langData.reduce((s, d) => s + d.value, 0);
+                    return (
+                      <div className="flex items-center gap-4">
+                        <PieChart width={120} height={120}>
+                          <Pie
+                            data={langData}
+                            cx={55}
+                            cy={55}
+                            innerRadius={30}
+                            outerRadius={55}
+                            paddingAngle={2}
+                            dataKey="value"
+                          >
+                            {langData.map((entry, index) => (
+                              <Cell key={index} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                        <div className="flex flex-col gap-2 flex-1">
+                          {langData.map(d => (
+                            <div key={d.name} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+                                <span className="text-sm text-gray-300">{d.name}</span>
+                              </div>
+                              <span className="text-sm font-bold text-white">
+                                {d.value}
+                                <span className="text-xs text-gray-400 font-normal ml-1">
+                                  {total > 0 ? `(${((d.value / total) * 100).toFixed(0)}%)` : ''}
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* ── BÖLÜM 5: Mesaj & İçerik İstatistikleri ── */}
+              <div>
+                <p className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-3">💬 Mesaj & İçerik</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard icon="💬" label="Bugün Mesaj"    value={stats.messages_today}     />
+                  <StatCard icon="📊" label="7 Gün Mesaj"    value={stats.messages_7days}     />
+                  <StatCard icon="🎯" label="Toplam Aktivite" value={stats.total_activities}  />
+                  <StatCard icon="💳" label="Toplam İşlem"   value={stats.total_transactions} />
+                </div>
+              </div>
+
+              {/* ── BÖLÜM 6: En Popüler Kategoriler ── */}
+              {categoryStats.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3">🏆 Popüler Kategoriler</p>
+                  <div className="bg-gray-800 rounded-2xl p-4">
+                    <ResponsiveContainer width="100%" height={categoryStats.length * 36 + 10}>
+                      <BarChart
+                        data={categoryStats}
+                        layout="vertical"
+                        margin={{ top: 0, right: 16, left: 4, bottom: 0 }}
+                      >
+                        <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fill: '#d1d5db', fontSize: 11 }} width={90} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 8, color: '#fff' }}
+                          cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                        />
+                        <Bar dataKey="count" fill="#f97316" radius={[0, 6, 6, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

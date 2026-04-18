@@ -432,7 +432,14 @@ export default function FinancePage() {
     <div className="pb-24 w-full animate-fade-in">
 
       {/* ── Header + search (sticky) ───────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-background">
+      <div
+        className="sticky z-10 bg-background"
+        style={{
+          top: 0,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          marginTop: 'calc(-1 * env(safe-area-inset-top, 0px))',
+        }}
+      >
         <div className="px-4 pt-4 pb-2 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-800 dark:text-foreground">{t('finance.title')}</h1>
           <div className="flex gap-3">

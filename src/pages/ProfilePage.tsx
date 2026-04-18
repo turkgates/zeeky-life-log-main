@@ -662,6 +662,14 @@ export default function ProfilePage() {
   if (pageLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-3">
+        <div
+          className="sticky z-10 bg-background"
+          style={{
+            top: 0,
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            marginTop: 'calc(-1 * env(safe-area-inset-top, 0px))',
+          }}
+        />
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         <p className="text-sm text-muted-foreground">{t('profile.loading')}</p>
       </div>
@@ -670,6 +678,14 @@ export default function ProfilePage() {
 
   return (
     <div className="pb-32 w-full animate-fade-in">
+      <div
+        className="sticky z-10 bg-background"
+        style={{
+          top: 0,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          marginTop: 'calc(-1 * env(safe-area-inset-top, 0px))',
+        }}
+      />
       <div className="flex items-center justify-between p-4">
         <h1 className="text-lg font-semibold">{t('profile.title')}</h1>
         <div className="flex gap-3">

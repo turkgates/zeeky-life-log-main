@@ -277,7 +277,7 @@ export default function NotificationsPage() {
   if (!userId) {
     return (
       <div className="min-h-screen bg-gray-50 w-full flex flex-col">
-        <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+        <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -298,7 +298,7 @@ export default function NotificationsPage() {
     <div className="min-h-screen bg-gray-50 w-full flex flex-col">
 
       {/* Header */}
-      <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+      <div className="bg-blue-600 text-white px-4 py-3 flex items-center gap-3 flex-shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <button
           type="button"
           onClick={() => navigate(-1)}

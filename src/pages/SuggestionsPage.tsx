@@ -235,7 +235,14 @@ export default function SuggestionsPage() {
     <div className="pb-24 w-full animate-fade-in relative">
 
       {/* Header + search (sticky) */}
-      <div className="sticky top-0 z-10 bg-background px-4 pb-3">
+      <div
+        className="sticky z-10 bg-background px-4 pb-3"
+        style={{
+          top: 0,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          marginTop: 'calc(-1 * env(safe-area-inset-top, 0px))',
+        }}
+      >
         <div className="flex items-center justify-between pt-4 pb-2">
           <h1 className="text-lg font-semibold">{t('suggestions.title')}</h1>
           <div className="flex items-center gap-1">
